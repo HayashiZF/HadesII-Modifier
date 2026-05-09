@@ -31,8 +31,8 @@ class HadesModUI(tk.Tk):
         )
 
         self.title("Hades II Mod UI")
-        self.geometry("1024x800")
-        self.minsize(900, 700)
+        self.geometry("1024x900")
+        self.minsize(1024, 900)
 
         self.profile_label_var = tk.StringVar()
         self.root_label_var = tk.StringVar(value=f"Target root: {self.paths.root_dir}")
@@ -128,14 +128,11 @@ class HadesModUI(tk.Tk):
             font=("Segoe UI", 10, "bold"),
         ).grid(row=4, column=0, sticky="w", pady=(6, 0))
 
-        self.main_split_pane = ttk.Panedwindow(container, orient="vertical")
-        self.main_split_pane.grid(row=1, column=0, sticky="nsew", pady=(12, 0))
+        self.notebook_container = ttk.Frame(container)
+        self.notebook_container.grid(row=1, column=0, sticky="nsew", pady=(20, 0))
+        self.notebook_container.columnconfigure(0, weight=1)
 
-        top_area = ttk.Frame(self.main_split_pane)
-        top_area.columnconfigure(0, weight=1)
-        top_area.rowconfigure(0, weight=1)
-
-        self.notebook = ttk.Notebook(top_area, style="ModeTabs.TNotebook")
+        self.notebook = ttk.Notebook(self.notebook_container, style="ModeTabs.TNotebook")
         self.notebook.grid(row=0, column=0, sticky="nsew", pady=(0, 12))
         self.notebook.bind("<<NotebookTabChanged>>", lambda _event: self._refresh_preview())
 
@@ -156,8 +153,12 @@ class HadesModUI(tk.Tk):
         self._build_reward_tab()
         self._build_keepsake_tab()
 
-        actions = ttk.LabelFrame(top_area, text="Actions", padding=12)
-        actions.grid(row=1, column=0, sticky="ew")
+        pinned_bottom = ttk.Frame(outer, padding=12)
+        pinned_bottom.grid(row=1, column=0, columnspan=2, sticky="ew")
+        pinned_bottom.columnconfigure(0, weight=1)
+
+        actions = ttk.LabelFrame(pinned_bottom, text="Actions", padding=12)
+        actions.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         for column in range(4):
             actions.columnconfigure(column, weight=1)
 
@@ -170,25 +171,24 @@ class HadesModUI(tk.Tk):
         self.restore_button = ttk.Button(actions, text="Restore Backups", command=self._on_restore)
         self.restore_button.grid(row=0, column=3, sticky="ew")
 
-        self.bottom_split_pane = ttk.Panedwindow(self.main_split_pane, orient="horizontal")
+        self.bottom_split_pane = ttk.Panedwindow(pinned_bottom, orient="horizontal")
+        self.bottom_split_pane.grid(row=1, column=0, sticky="ew")
+        
         preview_frame = ttk.LabelFrame(self.bottom_split_pane, text="Target Files", padding=12)
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
-        self.preview_listbox = tk.Listbox(preview_frame, listvariable=self.preview_list_var, height=10)
+        self.preview_listbox = tk.Listbox(preview_frame, listvariable=self.preview_list_var, height=8)
         self.preview_listbox.grid(row=0, column=0, sticky="nsew")
 
         log_frame = ttk.LabelFrame(self.bottom_split_pane, text="Activity", padding=12)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
-        self.log_text = tk.Text(log_frame, height=10, wrap="word", state="disabled")
+        self.log_text = tk.Text(log_frame, height=8, wrap="word", state="disabled")
         self.log_text.grid(row=0, column=0, sticky="nsew")
 
-        self.main_split_pane.add(top_area, weight=4)
-        self.main_split_pane.add(self.bottom_split_pane, weight=2)
         self.bottom_split_pane.add(preview_frame, weight=1)
         self.bottom_split_pane.add(log_frame, weight=1)
 
-        self.main_split_pane.bind("<ButtonRelease-1>", self._on_pane_sash_release)
         self.bottom_split_pane.bind("<ButtonRelease-1>", self._on_pane_sash_release)
         self.after(120, self._apply_saved_pane_positions)
 
@@ -881,10 +881,6 @@ class HadesModUI(tk.Tk):
     def _capture_pane_positions(self) -> None:
         panes_state = self.state.setdefault("ui_layout", {}).setdefault("panes", {})
         try:
-            panes_state["main_vertical"] = int(self.main_split_pane.sashpos(0))
-        except (tk.TclError, AttributeError, ValueError):
-            pass
-        try:
             panes_state["bottom_horizontal"] = int(self.bottom_split_pane.sashpos(0))
         except (tk.TclError, AttributeError, ValueError):
             pass
@@ -893,29 +889,15 @@ class HadesModUI(tk.Tk):
         panes_state = self.state.get("ui_layout", {}).get("panes", {})
         self.update_idletasks()
 
-        container_height = self.main_split_pane.winfo_height()
         container_width = self.bottom_split_pane.winfo_width()
-
-        # Keep both panes visible by default, even when no saved sash exists.
-        default_main_vertical = int(container_height * 0.68) if container_height > 0 else 520
         default_bottom_horizontal = int(container_width * 0.50) if container_width > 0 else 500
-
-        main_vertical = panes_state.get("main_vertical")
-        if not isinstance(main_vertical, int):
-            main_vertical = default_main_vertical
-        if container_height > 0:
-            main_vertical = max(280, min(main_vertical, container_height - 180))
 
         bottom_horizontal = panes_state.get("bottom_horizontal")
         if not isinstance(bottom_horizontal, int):
             bottom_horizontal = default_bottom_horizontal
         if container_width > 0:
-            bottom_horizontal = max(260, min(bottom_horizontal, container_width - 260))
+            bottom_horizontal = max(360, min(bottom_horizontal, container_width - 260))
 
-        try:
-            self.main_split_pane.sashpos(0, main_vertical)
-        except tk.TclError:
-            pass
         try:
             self.bottom_split_pane.sashpos(0, bottom_horizontal)
         except tk.TclError:
