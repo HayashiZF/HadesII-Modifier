@@ -1,0 +1,28 @@
+# Python environment and cache
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller / Build outputs
+build/
+dist/
+*.spec
+HadesIIModUI.exe
+
+# Modding runtime workspace
+.hades2_mod/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Hades Files
+Content/
+.hades2_mod/
+HadesIIModUI.exe
+
+
