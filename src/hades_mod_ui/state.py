@@ -1551,6 +1551,7 @@ DEFAULT_KEEPSAKE_EDITOR_STATE: dict[str, dict[str, Any]] = {
 }
 
 DEFAULT_STATE: dict[str, Any] = {
+    "ui_language": "en",
     "ui_layout": DEFAULT_UI_LAYOUT_STATE,
     "known_backups": [],
     "generated_files": [],

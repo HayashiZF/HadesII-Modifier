@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Any
@@ -16,6 +17,136 @@ from .state import (
     WEAPON_DAMAGE_WEAPONS,
 )
 
+LanguageCode = str
+
+TEXT_TEMPLATES: dict[str, dict[LanguageCode, str]] = {
+    "window_title": {"en": "Hades II Mod UI", "zh": "Hades II Mod 工具"},
+    "target_root": {"en": "Target root: {root}", "zh": "目标根目录: {root}"},
+    "current_profile": {"en": "Current profile: {profile}", "zh": "当前模式: {profile}"},
+    "preview_empty": {"en": "No files selected for the current profile.", "zh": "当前模式未选择任何文件。"},
+    "switch_to_zh": {"en": "切换到中文", "zh": "切换到中文"},
+    "switch_to_en": {"en": "Switch to English", "zh": "切换到英文"},
+    "workspace_updated_title": {"en": "Workspace Updated", "zh": "工作区已更新"},
+    "workspace_updated_body": {
+        "en": (
+            "Moved the app workspace from .hades2_mod_ui to .hades2_mod so your existing "
+            "backups and generated files continue to work."
+        ),
+        "zh": "已将应用工作区从 .hades2_mod_ui 迁移到 .hades2_mod，以确保现有备份和生成文件继续可用。",
+    },
+    "workspace_updated_log": {
+        "en": "Migrated workspace from .hades2_mod_ui to .hades2_mod.",
+        "zh": "已将工作区从 .hades2_mod_ui 迁移到 .hades2_mod。",
+    },
+    "generate_failed": {"en": "Generate failed: {message}", "zh": "生成失败: {message}"},
+    "generate_done_log": {"en": "Generated copies for: {files}", "zh": "已生成副本: {files}"},
+    "generate_done_body": {"en": "Generated copies:\n{files}", "zh": "已生成副本:\n{files}"},
+    "backup_failed": {"en": "Backup failed: {message}", "zh": "备份失败: {message}"},
+    "backup_done": {"en": "Backed up originals:\n{files}", "zh": "已备份原始文件:\n{files}"},
+    "backup_none": {"en": "All selected originals were already backed up.", "zh": "所选原始文件均已备份。"},
+    "apply_failed": {"en": "Apply failed: {message}", "zh": "替换失败: {message}"},
+    "apply_done_log": {"en": "Applied generated files: {files}", "zh": "已应用生成文件: {files}"},
+    "apply_done_body": {"en": "Applied files:\n{files}", "zh": "已应用文件:\n{files}"},
+    "restore_failed": {"en": "Restore failed: {message}", "zh": "恢复失败: {message}"},
+    "restore_done_log": {"en": "Restored backups: {files}", "zh": "已恢复备份: {files}"},
+    "restore_done_body": {"en": "Restored files:\n{files}", "zh": "已恢复文件:\n{files}"},
+}
+
+STATIC_TEXT_TRANSLATIONS: dict[str, str] = {
+    "Hades II Mod UI": "Hades II Mod 工具",
+    "Click a tab below to switch modes.": "点击下方标签页以切换模式。",
+    "Initial Stats": "初始属性",
+    "Rarity": "稀有度",
+    "Boon Multipliers": "祝福倍率",
+    "Weapon Damage": "武器伤害",
+    "Reward Amounts": "奖励数值",
+    "Keepsake": "信物",
+    "Actions": "操作",
+    "1. Backup Originals": "1. 备份原始文件",
+    "2. Generate Copies": "2. 生成副本",
+    "3. Apply Replacement": "3. 应用替换",
+    "4. Restore Backups": "4. 恢复备份",
+    "Target Files": "目标文件",
+    "Activity": "活动日志",
+    "Initial Hero Stats": "初始角色属性",
+    "Enable patch": "启用补丁",
+    "Normal Gods": "常规神祇",
+    "Hermes": "赫尔墨斯",
+    "Chaos": "混沌",
+    "Artemis": "阿尔忒弥斯",
+    "Hades": "哈迪斯",
+    "Icarus": "伊卡洛斯",
+    (
+        "Enable god/boon patches and edit detected multiplier fields. "
+        "Core rarity multipliers and nested *Multiplier values are discovered from live TraitData files."
+    ): "启用神祇/祝福补丁并编辑检测到的倍率字段。核心稀有度倍率和嵌套的 *Multiplier 数值来自实时 TraitData 文件。",
+    "No editable multiplier fields detected in this boon.": "未在该祝福中检测到可编辑的倍率字段。",
+    "Show advanced stack fields": "显示高级层数字段",
+    "Read-only: SourceIsMultiplier is detected and not editable.": "只读: 检测到 SourceIsMultiplier，无法编辑。",
+    (
+        "Generate a patched TraitData.lua that adds a flat base-damage bonus to one or more "
+        "primary weapon families through the DummyWeapon* trait entries."
+    ): "生成修改后的 TraitData.lua，通过 DummyWeapon* 词条为一个或多个主武器系列增加固定基础伤害。",
+    "Each enabled weapon family applies a flat bonus across its linked attacks.": "每个启用的武器系列都会对其关联攻击应用固定加成。",
+    "Flat damage bonus": "固定伤害加成",
+    (
+        "Edit the global post-combat room-clear payout values in ConsumableData.lua. "
+        "Primary fields change the real pickup reward. Advanced metadata is optional and hidden by default."
+    ): "编辑 ConsumableData.lua 中全局战斗结算奖励。主字段影响实际拾取奖励，高级元数据为可选且默认隐藏。",
+    "Only core money, health, and mana reward definitions are included in this v1 editor.": "此 v1 编辑器仅包含金币、生命和法力奖励的核心定义。",
+    "Money": "金币",
+    "Health": "生命",
+    "Mana": "法力",
+    "Show advanced metadata": "显示高级元数据",
+    (
+        "Configure per-keepsake buffs for TraitData_Keepsake.lua. "
+        "Primary fields are always visible. Optional rarity multipliers and "
+        "secondary values are available through advanced controls."
+    ): "为 TraitData_Keepsake.lua 配置每个信物的增益。主字段始终可见，可选稀有度倍率和次级数值可通过高级选项设置。",
+    "Enable only the keepsakes you want to patch before generating copies.": "请仅启用你要修改的信物后再生成副本。",
+    "Show advanced fields": "显示高级字段",
+    "Generate Copies": "生成副本",
+    "Backup Originals": "备份原始文件",
+    "Apply Replacement": "应用替换",
+    "Restore Backups": "恢复备份",
+}
+
+EXACT_ERROR_TRANSLATIONS: dict[str, str] = {
+    "Enable Initial Stats patch before generating copies.": "请先启用初始属性补丁后再生成副本。",
+    "Enable at least one god and one boon in Boon Multipliers before generating copies.": "请先在祝福倍率中至少启用一个神祇和一个祝福后再生成副本。",
+    "Enable at least one weapon damage patch before generating copies.": "请先启用至少一个武器伤害补丁后再生成副本。",
+    "Enable at least one reward amount patch before generating copies.": "请先启用至少一个奖励数值补丁后再生成副本。",
+    "Enable at least one keepsake patch before generating copies.": "请先启用至少一个信物补丁后再生成副本。",
+    "Select at least one rarity source before generating copies.": "请先选择至少一个稀有度来源后再生成副本。",
+    "There are no target files to back up for the current selection.": "当前选择没有可备份的目标文件。",
+    "There are no generated files to apply.": "没有可应用的生成文件。",
+    "No backups are available to restore.": "没有可恢复的备份。",
+    "There are no files to copy.": "没有可复制的文件。",
+    "Unsupported expression": "不支持的表达式",
+}
+
+PREFIX_ERROR_TRANSLATIONS: tuple[tuple[str, str], ...] = (
+    ("Missing target file: ", "缺少目标文件: "),
+    ("Generated file is missing: ", "缺少生成文件: "),
+    ("Missing source file for copy: ", "复制缺少源文件: "),
+    ("Missing destination file for copy: ", "复制缺少目标文件: "),
+    ("Missing weapon damage configuration for ", "缺少武器伤害配置: "),
+    ("Missing reward editor configuration for ", "缺少奖励编辑配置: "),
+    ("Missing keepsake editor configuration for ", "缺少信物编辑配置: "),
+    ("Missing boon multiplier configuration for god '", "缺少神祇祝福倍率配置: god '"),
+    ("Missing boon multiplier configuration for boon '", "缺少祝福倍率配置: boon '"),
+    ("Missing multiplier field '", "缺少倍率字段 '"),
+    ("Unsupported keepsake input type '", "不支持的信物输入类型 '"),
+)
+
+STATUS_PREFIX_TRANSLATIONS: tuple[tuple[str, str], ...] = (
+    ("Using scripts directory: ", "使用脚本目录: "),
+    (
+        "Expected Content/Scripts at the Hades parent folder, but it was not found: ",
+        "在 Hades 根目录期望存在 Content/Scripts，但未找到: ",
+    ),
+)
+
 
 class HadesModUI(tk.Tk):
     def __init__(self) -> None:
@@ -29,15 +160,20 @@ class HadesModUI(tk.Tk):
             self.state,
             self.boon_multiplier_metadata,
         )
+        self.language = self._normalize_language(self.state.get("ui_language"))
+        self.state["ui_language"] = self.language
 
-        self.title("Hades II Mod UI")
+        self.title(self._tr("window_title"))
         self.geometry("1024x900")
         self.minsize(1024, 900)
 
         self.profile_label_var = tk.StringVar()
-        self.root_label_var = tk.StringVar(value=f"Target root: {self.paths.root_dir}")
+        self.root_label_var = tk.StringVar(value=self._trf("target_root", root=self.paths.root_dir))
         self.status_label_var = tk.StringVar()
+        self.language_button_var = tk.StringVar()
         self.active_scroll_canvas: tk.Canvas | None = None
+        self.localized_widgets: list[tuple[tk.Misc, str]] = []
+        self.localized_widgets_dyn: list[tuple[tk.Misc, Any]] = []
 
         self.epic_profile_key = "epic_preset"
         self.initial_stats_profile_key = "initial_stats"
@@ -71,11 +207,119 @@ class HadesModUI(tk.Tk):
 
         self._configure_styles()
         self._build_ui()
+        self._collect_localizable_widgets()
         self._load_state_into_ui()
+        self._apply_language()
         self._refresh_header_state()
         self._refresh_preview()
         if self.legacy_workspace_migrated:
             self.after(50, self._show_workspace_migration_notice)
+
+    def _normalize_language(self, value: Any) -> LanguageCode:
+        return "zh" if value == "zh" else "en"
+
+    def _tr(self, key: str) -> str:
+        return TEXT_TEMPLATES.get(key, {}).get(self.language, key)
+
+    def _trf(self, key: str, **kwargs: Any) -> str:
+        return self._tr(key).format(**kwargs)
+
+    def _translate_text(self, text: str) -> str:
+        if self.language == "en":
+            return text
+        match = re.match(r"^Enable all (.+) boon edits$", text)
+        if match:
+            return f"启用 {match.group(1)} 的全部祝福编辑"
+        return STATIC_TEXT_TRANSLATIONS.get(text, text)
+
+    def _register_text(self, widget: tk.Misc, text: str) -> None:
+        self.localized_widgets.append((widget, text))
+
+    def _register_text_dynamic(self, widget: tk.Misc, resolver: Any) -> None:
+        self.localized_widgets_dyn.append((widget, resolver))
+
+    def _translate_operation_message(self, message: str) -> str:
+        if self.language == "en":
+            return message
+        if message in EXACT_ERROR_TRANSLATIONS:
+            return EXACT_ERROR_TRANSLATIONS[message]
+        if message.startswith("Missing files to back up:\n"):
+            tail = message.split("\n", 1)[1] if "\n" in message else ""
+            return "缺少待备份文件:\n" + tail
+        if message.startswith("Missing backup files:\n"):
+            tail = message.split("\n", 1)[1] if "\n" in message else ""
+            return "缺少备份文件:\n" + tail
+        for prefix_en, prefix_zh in PREFIX_ERROR_TRANSLATIONS:
+            if message.startswith(prefix_en):
+                return prefix_zh + message[len(prefix_en) :]
+        return message
+
+    def _translate_status_message(self, message: str) -> str:
+        if self.language == "en":
+            return message
+        for prefix_en, prefix_zh in STATUS_PREFIX_TRANSLATIONS:
+            if message.startswith(prefix_en):
+                return prefix_zh + message[len(prefix_en) :]
+        return message
+
+    def _translate_profile_name(self, profile: str) -> str:
+        return self._translate_text(profile)
+
+    def _translate_preview_item(self, item: str) -> str:
+        if self.language == "en":
+            return item
+        if item.startswith("Content/Scripts/"):
+            return "Content/Scripts/" + self._translate_text(item.removeprefix("Content/Scripts/"))
+        return self._translate_text(item)
+
+    def _set_widget_text(self, widget: tk.Misc, text: str) -> None:
+        try:
+            widget.configure(text=text)
+        except tk.TclError:
+            return
+
+    def _collect_localizable_widgets(self) -> None:
+        self.localized_widgets = []
+
+        def walk(widget: tk.Misc) -> None:
+            for child in widget.winfo_children():
+                if child is getattr(self, "language_toggle_button", None):
+                    walk(child)
+                    continue
+                try:
+                    text_value = child.cget("text")
+                except tk.TclError:
+                    text_value = ""
+                if isinstance(text_value, str) and text_value:
+                    self.localized_widgets.append((child, text_value))
+                walk(child)
+
+        walk(self)
+
+    def _update_language_button_label(self) -> None:
+        if self.language == "en":
+            self.language_button_var.set(self._tr("switch_to_zh"))
+        else:
+            self.language_button_var.set(self._tr("switch_to_en"))
+
+    def _apply_language(self) -> None:
+        self.title(self._tr("window_title"))
+        self._update_language_button_label()
+        for widget, text in self.localized_widgets:
+            self._set_widget_text(widget, self._translate_text(text))
+        for widget, resolver in self.localized_widgets_dyn:
+            self._set_widget_text(widget, self._translate_text(resolver()))
+        if hasattr(self, "notebook"):
+            for index, tab in enumerate(self.notebook_tab_labels):
+                self.notebook.tab(index, text=self._translate_text(tab))
+        self._refresh_preview()
+        self._refresh_header_state()
+
+    def _toggle_language(self) -> None:
+        self.language = "zh" if self.language == "en" else "en"
+        self.state["ui_language"] = self.language
+        self.service.save_state(self.state)
+        self._apply_language()
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self)
@@ -117,20 +361,32 @@ class HadesModUI(tk.Tk):
         header = ttk.Frame(container)
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
+        header.columnconfigure(1, weight=0)
 
-        ttk.Label(header, text="Hades II Mod UI", font=("Segoe UI", 16, "bold")).grid(
+        self.header_title_label = ttk.Label(header, text="Hades II Mod UI", font=("Segoe UI", 16, "bold"))
+        self.header_title_label.grid(
             row=0, column=0, sticky="w"
         )
-        ttk.Label(header, textvariable=self.root_label_var).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Label(header, textvariable=self.status_label_var).grid(row=2, column=0, sticky="w", pady=(4, 0))
-        ttk.Label(header, textvariable=self.profile_label_var).grid(row=3, column=0, sticky="w", pady=(4, 0))
+        self.language_toggle_button = ttk.Button(
+            header,
+            textvariable=self.language_button_var,
+            command=self._toggle_language,
+        )
+        self.language_toggle_button.grid(row=0, column=1, sticky="e")
+        self.root_label = ttk.Label(header, textvariable=self.root_label_var)
+        self.root_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self.status_label = ttk.Label(header, textvariable=self.status_label_var)
+        self.status_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
+        self.profile_label = ttk.Label(header, textvariable=self.profile_label_var)
+        self.profile_label.grid(row=3, column=0, sticky="w", pady=(4, 0))
 
-        ttk.Label(
+        self.header_hint_label = ttk.Label(
             header,
             text="Click a tab below to switch modes.",
             foreground="#0b5cad",
             font=("Segoe UI", 10, "bold"),
-        ).grid(row=4, column=0, sticky="w", pady=(6, 0))
+        )
+        self.header_hint_label.grid(row=4, column=0, sticky="w", pady=(6, 0))
 
         self.notebook_container = ttk.Frame(container)
         self.notebook_container.grid(row=1, column=0, sticky="nsew", pady=(20, 0))
@@ -753,9 +1009,11 @@ class HadesModUI(tk.Tk):
 
     def _refresh_header_state(self) -> None:
         valid, message = self.service.validate_scripts_dir()
-        self.status_label_var.set(message)
+        self.status_label_var.set(self._translate_status_message(message))
         current_tab = self.notebook_tab_labels[self.notebook.index(self.notebook.select())]
-        self.profile_label_var.set(f"Current profile: {current_tab}")
+        current_profile = self._translate_profile_name(current_tab)
+        self.profile_label_var.set(self._trf("current_profile", profile=current_profile))
+        self.root_label_var.set(self._trf("target_root", root=self.paths.root_dir))
 
         new_state = "normal" if valid else "disabled"
         for button in (self.generate_button, self.backup_button, self.apply_button, self.restore_button):
@@ -766,9 +1024,9 @@ class HadesModUI(tk.Tk):
         profile = self._current_profile()
         profile_state = self._collect_profile_state(profile)
         targets = self.service.get_target_files(profile, profile_state)
-        display_items = [f"Content/Scripts/{name}" for name in targets]
+        display_items = [self._translate_preview_item(f"Content/Scripts/{name}") for name in targets]
         if not display_items:
-            display_items = ["No files selected for the current profile."]
+            display_items = [self._tr("preview_empty")]
         self.preview_list_var.set(display_items)
 
     def _current_profile(self) -> str:
@@ -974,25 +1232,27 @@ class HadesModUI(tk.Tk):
 
     def _show_workspace_migration_notice(self) -> None:
         messagebox.showinfo(
-            "Workspace Updated",
-            (
-                "Moved the app workspace from .hades2_mod_ui to .hades2_mod so your existing "
-                "backups and generated files continue to work."
-            ),
+            self._tr("workspace_updated_title"),
+            self._tr("workspace_updated_body"),
         )
-        self._append_log("Migrated workspace from .hades2_mod_ui to .hades2_mod.")
+        self._append_log(self._tr("workspace_updated_log"))
 
     def _on_generate(self) -> None:
         profile, profile_state = self._persist_ui_state()
         try:
             generated = self.service.generate_copies(profile, profile_state, self.state)
         except (OperationError, ValueError) as exc:
-            messagebox.showerror("Generate Copies", str(exc))
-            self._append_log(f"Generate failed: {exc}")
+            message = self._translate_operation_message(str(exc))
+            messagebox.showerror(self._translate_text("Generate Copies"), message)
+            self._append_log(self._trf("generate_failed", message=message))
             return
 
-        self._append_log("Generated copies for: " + ", ".join(generated))
-        messagebox.showinfo("Generate Copies", "Generated copies:\n" + "\n".join(generated))
+        joined = ", ".join(generated)
+        self._append_log(self._trf("generate_done_log", files=joined))
+        messagebox.showinfo(
+            self._translate_text("Generate Copies"),
+            self._trf("generate_done_body", files="\n".join(generated)),
+        )
 
     def _on_backup(self) -> None:
         profile, profile_state = self._persist_ui_state()
@@ -1000,16 +1260,17 @@ class HadesModUI(tk.Tk):
         try:
             backed_up = self.service.backup_originals(targets, self.state)
         except OperationError as exc:
-            messagebox.showerror("Backup Originals", str(exc))
-            self._append_log(f"Backup failed: {exc}")
+            message = self._translate_operation_message(str(exc))
+            messagebox.showerror(self._translate_text("Backup Originals"), message)
+            self._append_log(self._trf("backup_failed", message=message))
             return
 
         if backed_up:
-            message = "Backed up originals:\n" + "\n".join(backed_up)
+            message = self._trf("backup_done", files="\n".join(backed_up))
         else:
-            message = "All selected originals were already backed up."
+            message = self._tr("backup_none")
         self._append_log(message.replace("\n", " "))
-        messagebox.showinfo("Backup Originals", message)
+        messagebox.showinfo(self._translate_text("Backup Originals"), message)
 
     def _on_apply(self) -> None:
         profile, profile_state = self._persist_ui_state()
@@ -1017,24 +1278,34 @@ class HadesModUI(tk.Tk):
             generated = self.service.generate_copies(profile, profile_state, self.state)
             applied = self.service.apply_generated_files(generated, self.state, profile)
         except (OperationError, ValueError) as exc:
-            messagebox.showerror("Apply Replacement", str(exc))
-            self._append_log(f"Apply failed: {exc}")
+            message = self._translate_operation_message(str(exc))
+            messagebox.showerror(self._translate_text("Apply Replacement"), message)
+            self._append_log(self._trf("apply_failed", message=message))
             return
 
-        self._append_log("Applied generated files: " + ", ".join(applied))
-        messagebox.showinfo("Apply Replacement", "Applied files:\n" + "\n".join(applied))
+        joined = ", ".join(applied)
+        self._append_log(self._trf("apply_done_log", files=joined))
+        messagebox.showinfo(
+            self._translate_text("Apply Replacement"),
+            self._trf("apply_done_body", files="\n".join(applied)),
+        )
 
     def _on_restore(self) -> None:
         self._persist_ui_state()
         try:
             restored = self.service.restore_all_backups(self.state)
         except OperationError as exc:
-            messagebox.showerror("Restore Backups", str(exc))
-            self._append_log(f"Restore failed: {exc}")
+            message = self._translate_operation_message(str(exc))
+            messagebox.showerror(self._translate_text("Restore Backups"), message)
+            self._append_log(self._trf("restore_failed", message=message))
             return
 
-        self._append_log("Restored backups: " + ", ".join(restored))
-        messagebox.showinfo("Restore Backups", "Restored files:\n" + "\n".join(restored))
+        joined = ", ".join(restored)
+        self._append_log(self._trf("restore_done_log", files=joined))
+        messagebox.showinfo(
+            self._translate_text("Restore Backups"),
+            self._trf("restore_done_body", files="\n".join(restored)),
+        )
 
 
 def run_app() -> None:
