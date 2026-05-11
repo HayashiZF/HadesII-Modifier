@@ -42,6 +42,13 @@ DEFAULT_UI_LAYOUT_STATE: dict[str, Any] = {
     }
 }
 
+DEFAULT_INITIAL_STATS_STATE: dict[str, Any] = {
+    "enabled": False,
+    "max_health": "30",
+    "max_mana": "50",
+    "starting_money": "0",
+}
+
 
 DEFAULT_RARITY_EDITOR_STATE: dict[str, dict[str, Any]] = {
     "normal_gods": {
@@ -1553,6 +1560,7 @@ DEFAULT_STATE: dict[str, Any] = {
         "epic_preset": {
             "scope": "olympians_plus_hermes",
         },
+        "initial_stats": DEFAULT_INITIAL_STATS_STATE,
         "rarity_editor": DEFAULT_RARITY_EDITOR_STATE,
         "reward_editor": DEFAULT_REWARD_EDITOR_STATE,
         "weapon_damage": DEFAULT_WEAPON_DAMAGE_STATE,

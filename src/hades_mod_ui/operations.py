@@ -10,6 +10,8 @@ import tempfile
 from typing import Any, Callable
 
 from .patches import (
+    apply_initial_stats_hero_data_profile,
+    apply_initial_stats_run_logic_profile,
     apply_keepsake_editor_profile,
     apply_reward_editor_profile,
     WEAPON_DAMAGE_FAMILY_MAP,
@@ -32,6 +34,7 @@ from .state import (
     BOON_MULTIPLIER_GOD_FILE_MAP,
     BOON_MULTIPLIER_GOD_SOURCES,
     DEFAULT_BOON_MULTIPLIER_STATE,
+    DEFAULT_INITIAL_STATS_STATE,
     DEFAULT_KEEPSAKE_EDITOR_STATE,
     DEFAULT_RARITY_EDITOR_STATE,
     DEFAULT_REWARD_EDITOR_STATE,
@@ -67,6 +70,9 @@ class ModService:
 
     def default_boon_multiplier_state(self) -> dict[str, Any]:
         return copy.deepcopy(DEFAULT_BOON_MULTIPLIER_STATE)
+
+    def default_initial_stats_state(self) -> dict[str, Any]:
+        return copy.deepcopy(DEFAULT_INITIAL_STATS_STATE)
 
     def load_state(self) -> dict[str, Any]:
         return self.state_store.load()
@@ -178,6 +184,10 @@ class ModService:
     def get_target_files(self, profile: str, profile_state: dict[str, Any]) -> list[str]:
         if profile == "epic_preset":
             return ["TraitLogic.lua"]
+        if profile == "initial_stats":
+            if bool(profile_state.get("enabled")):
+                return ["HeroData.lua", "RunLogic.lua"]
+            return []
         if profile == "boon_multiplier":
             targets: list[str] = []
             gods = profile_state.get("gods", {})
@@ -228,6 +238,8 @@ class ModService:
 
         targets = self.get_target_files(profile, profile_state)
         if not targets:
+            if profile == "initial_stats":
+                raise OperationError("Enable Initial Stats patch before generating copies.")
             if profile == "boon_multiplier":
                 raise OperationError(
                     "Enable at least one god and one boon in Boon Multipliers before generating copies."
@@ -366,6 +378,12 @@ class ModService:
             validated_state = self._validate_keepsake_editor_state(profile_state)
             return {
                 "TraitData_Keepsake.lua": lambda text: apply_keepsake_editor_profile(text, validated_state),
+            }
+        if profile == "initial_stats":
+            validated_state = self._validate_initial_stats_state(profile_state)
+            return {
+                "HeroData.lua": lambda text: apply_initial_stats_hero_data_profile(text, validated_state),
+                "RunLogic.lua": lambda text: apply_initial_stats_run_logic_profile(text, validated_state),
             }
 
         validated_state = self._validate_rarity_editor_state(profile_state)
@@ -512,6 +530,23 @@ class ModService:
                 else:
                     raise OperationError(f"Unsupported keepsake input type '{input_type}' for {label}.")
             keepsake_state["fields"] = fields
+        return validated
+
+    def _validate_initial_stats_state(self, initial_stats_state: dict[str, Any]) -> dict[str, Any]:
+        validated = copy.deepcopy(initial_stats_state)
+        validated["enabled"] = bool(validated.get("enabled"))
+        validated["max_health"] = validate_whole_number_string(
+            str(validated.get("max_health", "")).strip(),
+            "initial_stats.max_health",
+        )
+        validated["max_mana"] = validate_whole_number_string(
+            str(validated.get("max_mana", "")).strip(),
+            "initial_stats.max_mana",
+        )
+        validated["starting_money"] = validate_whole_number_string(
+            str(validated.get("starting_money", "")).strip(),
+            "initial_stats.starting_money",
+        )
         return validated
 
     def _build_boon_multiplier_generators(

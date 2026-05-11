@@ -40,10 +40,12 @@ class HadesModUI(tk.Tk):
         self.active_scroll_canvas: tk.Canvas | None = None
 
         self.epic_profile_key = "epic_preset"
+        self.initial_stats_profile_key = "initial_stats"
         self.reward_profile_key = "reward_editor"
         self.weapon_damage_profile_key = "weapon_damage"
         self.keepsake_profile_key = "keepsake_editor"
         self.boon_multiplier_profile_key = "boon_multiplier"
+        self.initial_stats_vars: dict[str, Any] = {}
         self.rarity_editor_vars: dict[str, dict[str, Any]] = {}
         self.reward_editor_vars: dict[str, dict[str, Any]] = {}
         self.weapon_damage_vars: dict[str, dict[str, Any]] = {}
@@ -51,6 +53,7 @@ class HadesModUI(tk.Tk):
         self.boon_multiplier_vars: dict[str, dict[str, Any]] = {}
         self.preview_list_var = tk.StringVar(value=[])
         self.notebook_tab_profiles = (
+            self.initial_stats_profile_key,
             "rarity_editor",
             self.boon_multiplier_profile_key,
             self.weapon_damage_profile_key,
@@ -58,7 +61,8 @@ class HadesModUI(tk.Tk):
             self.keepsake_profile_key,
         )
         self.notebook_tab_labels = (
-            "Rarity Editor",
+            "Initial Stats",
+            "Rarity",
             "Boon Multipliers",
             "Weapon Damage",
             "Reward Amounts",
@@ -136,17 +140,20 @@ class HadesModUI(tk.Tk):
         self.notebook.grid(row=0, column=0, sticky="nsew", pady=(0, 12))
         self.notebook.bind("<<NotebookTabChanged>>", lambda _event: self._refresh_preview())
 
+        self.initial_stats_frame = ttk.Frame(self.notebook, padding=12)
         self.rarity_frame = ttk.Frame(self.notebook, padding=12)
         self.boon_multiplier_frame = ttk.Frame(self.notebook, padding=12)
         self.weapon_damage_frame = ttk.Frame(self.notebook, padding=12)
         self.reward_frame = ttk.Frame(self.notebook, padding=12)
         self.keepsake_frame = ttk.Frame(self.notebook, padding=12)
-        self.notebook.add(self.rarity_frame, text=self.notebook_tab_labels[0])
-        self.notebook.add(self.boon_multiplier_frame, text=self.notebook_tab_labels[1])
-        self.notebook.add(self.weapon_damage_frame, text=self.notebook_tab_labels[2])
-        self.notebook.add(self.reward_frame, text=self.notebook_tab_labels[3])
-        self.notebook.add(self.keepsake_frame, text=self.notebook_tab_labels[4])
+        self.notebook.add(self.initial_stats_frame, text=self.notebook_tab_labels[0])
+        self.notebook.add(self.rarity_frame, text=self.notebook_tab_labels[1])
+        self.notebook.add(self.boon_multiplier_frame, text=self.notebook_tab_labels[2])
+        self.notebook.add(self.weapon_damage_frame, text=self.notebook_tab_labels[3])
+        self.notebook.add(self.reward_frame, text=self.notebook_tab_labels[4])
+        self.notebook.add(self.keepsake_frame, text=self.notebook_tab_labels[5])
 
+        self._build_initial_stats_tab()
         self._build_rarity_tab()
         self._build_boon_multiplier_tab()
         self._build_weapon_damage_tab()
@@ -162,13 +169,13 @@ class HadesModUI(tk.Tk):
         for column in range(4):
             actions.columnconfigure(column, weight=1)
 
-        self.generate_button = ttk.Button(actions, text="Generate Copies", command=self._on_generate)
-        self.generate_button.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self.backup_button = ttk.Button(actions, text="Backup Originals", command=self._on_backup)
-        self.backup_button.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        self.apply_button = ttk.Button(actions, text="Apply Replacement", command=self._on_apply)
+        self.backup_button = ttk.Button(actions, text="1. Backup Originals", command=self._on_backup)
+        self.backup_button.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.generate_button = ttk.Button(actions, text="2. Generate Copies", command=self._on_generate)
+        self.generate_button.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        self.apply_button = ttk.Button(actions, text="3. Apply Replacement", command=self._on_apply)
         self.apply_button.grid(row=0, column=2, sticky="ew", padx=(0, 8))
-        self.restore_button = ttk.Button(actions, text="Restore Backups", command=self._on_restore)
+        self.restore_button = ttk.Button(actions, text="4. Restore Backups", command=self._on_restore)
         self.restore_button.grid(row=0, column=3, sticky="ew")
 
         self.bottom_split_pane = ttk.Panedwindow(pinned_bottom, orient="horizontal")
@@ -191,6 +198,44 @@ class HadesModUI(tk.Tk):
 
         self.bottom_split_pane.bind("<ButtonRelease-1>", self._on_pane_sash_release)
         self.after(120, self._apply_saved_pane_positions)
+
+    def _build_initial_stats_tab(self) -> None:
+        scrollable = self._create_scrollable_tab(self.initial_stats_frame)
+        scrollable.columnconfigure(1, weight=1)
+
+        frame = ttk.LabelFrame(scrollable, text="Initial Hero Stats", padding=12)
+        frame.grid(row=0, column=0, sticky="ew")
+        frame.columnconfigure(1, weight=1)
+
+        enabled_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            frame,
+            text="Enable patch",
+            variable=enabled_var,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        enabled_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+        max_health_var = tk.StringVar(value="30")
+        ttk.Label(frame, text="MaxHealth").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(frame, textvariable=max_health_var).grid(row=1, column=1, sticky="ew", pady=2)
+        max_health_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+        max_mana_var = tk.StringVar(value="50")
+        ttk.Label(frame, text="MaxMana").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Entry(frame, textvariable=max_mana_var).grid(row=2, column=1, sticky="ew", pady=2)
+        max_mana_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+        starting_money_var = tk.StringVar(value="0")
+        ttk.Label(frame, text="StartingMoney").grid(row=3, column=0, sticky="w", pady=2)
+        ttk.Entry(frame, textvariable=starting_money_var).grid(row=3, column=1, sticky="ew", pady=2)
+        starting_money_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+        self.initial_stats_vars = {
+            "enabled": enabled_var,
+            "max_health": max_health_var,
+            "max_mana": max_mana_var,
+            "starting_money": starting_money_var,
+        }
 
     def _build_rarity_tab(self) -> None:
         scrollable = self._create_scrollable_tab(self.rarity_frame)
@@ -647,6 +692,12 @@ class HadesModUI(tk.Tk):
         return scrollable
 
     def _load_state_into_ui(self) -> None:
+        initial_stats_state = self.state["profiles"][self.initial_stats_profile_key]
+        self.initial_stats_vars["enabled"].set(bool(initial_stats_state.get("enabled")))
+        self.initial_stats_vars["max_health"].set(str(initial_stats_state.get("max_health", "30")))
+        self.initial_stats_vars["max_mana"].set(str(initial_stats_state.get("max_mana", "50")))
+        self.initial_stats_vars["starting_money"].set(str(initial_stats_state.get("starting_money", "0")))
+
         rarity_state = self.state["profiles"]["rarity_editor"]
         for source_key, vars_for_source in self.rarity_editor_vars.items():
             source_state = rarity_state[source_key]
@@ -738,6 +789,14 @@ class HadesModUI(tk.Tk):
             collected[source_key] = source_state
         return collected
 
+    def _collect_initial_stats_state(self) -> dict[str, Any]:
+        return {
+            "enabled": bool(self.initial_stats_vars["enabled"].get()),
+            "max_health": self.initial_stats_vars["max_health"].get().strip(),
+            "max_mana": self.initial_stats_vars["max_mana"].get().strip(),
+            "starting_money": self.initial_stats_vars["starting_money"].get().strip(),
+        }
+
     def _collect_weapon_damage_state(self) -> dict[str, Any]:
         collected: dict[str, Any] = {}
         for weapon_name, vars_for_weapon in self.weapon_damage_vars.items():
@@ -780,6 +839,8 @@ class HadesModUI(tk.Tk):
         return collected
 
     def _collect_profile_state(self, profile: str) -> dict[str, Any]:
+        if profile == self.initial_stats_profile_key:
+            return self._collect_initial_stats_state()
         if profile == "rarity_editor":
             return self._collect_rarity_editor_state()
         if profile == self.boon_multiplier_profile_key:
@@ -806,6 +867,7 @@ class HadesModUI(tk.Tk):
         return collected
 
     def _persist_ui_state(self) -> tuple[str, dict[str, Any]]:
+        self.state["profiles"][self.initial_stats_profile_key] = self._collect_initial_stats_state()
         self.state["profiles"]["rarity_editor"] = self._collect_rarity_editor_state()
         self.state["profiles"][self.boon_multiplier_profile_key] = self._collect_boon_multiplier_state()
         self.state["profiles"]["weapon_damage"] = self._collect_weapon_damage_state()

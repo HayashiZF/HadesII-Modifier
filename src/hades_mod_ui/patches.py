@@ -252,6 +252,20 @@ def apply_keepsake_editor_profile(text: str, keepsake_editor_state: dict[str, di
     return updated
 
 
+def apply_initial_stats_hero_data_profile(text: str, initial_stats_state: dict[str, str | bool]) -> str:
+    updated = replace_unique_scalar_field(text, "MaxHealth", str(initial_stats_state["max_health"]))
+    updated = replace_unique_scalar_field(updated, "MaxMana", str(initial_stats_state["max_mana"]))
+    return updated
+
+
+def apply_initial_stats_run_logic_profile(text: str, initial_stats_state: dict[str, str | bool]) -> str:
+    return replace_function_return_value(
+        text,
+        "CalculateStartingMoney",
+        str(initial_stats_state["starting_money"]),
+    )
+
+
 def replace_table_in_section(
     text: str,
     section_name: str,
@@ -630,3 +644,24 @@ def find_matching_brace(text: str, open_brace_index: int) -> int:
             if depth == 0:
                 return index
     raise PatchError("Could not find the matching closing brace for a Lua section.")
+
+
+def replace_function_return_value(text: str, function_name: str, value: str) -> str:
+    function_pattern = re.compile(rf"(?ms)(^function\s+{re.escape(function_name)}\s*\([^)]*\)\s*\n)(.*?)(\nend\b)")
+    matches = list(function_pattern.finditer(text))
+    if len(matches) != 1:
+        raise PatchError(f"Expected exactly one function '{function_name}', found {len(matches)}.")
+
+    match = matches[0]
+    body = match.group(2)
+    return_pattern = re.compile(r"(?m)^([ \t]*)return\s+.*$")
+    return_matches = list(return_pattern.finditer(body))
+    if len(return_matches) != 1:
+        raise PatchError(
+            f"Expected exactly one return statement in function '{function_name}', found {len(return_matches)}."
+        )
+
+    return_match = return_matches[0]
+    indent = return_match.group(1)
+    replacement_body = body[: return_match.start()] + f"{indent}return {value}" + body[return_match.end() :]
+    return text[: match.start()] + match.group(1) + replacement_body + match.group(3) + text[match.end() :]
