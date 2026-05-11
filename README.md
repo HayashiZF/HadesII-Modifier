@@ -2,25 +2,16 @@
 
 [中文](README_ZH.md)
 
-For noob players like you and me, who suffer but are still eager to find a way to lead "Death to Chronos!"
+For noob players like you and me, who suffer but are still eager to find a way to clear the game.
 
 ## Overview
 
 The `HadesIIModUI` uses deterministic Lua text transforms to insert patches into the `Content/Scripts` folder. The application always ensures backups are made before applying changes and maintains state in a local `.hades2_mod` workspace.
 
-## Getting Started
-
-### Building the Tool
-If you haven't already, you can compile the Python tool into a standalone Windows executable by running:
-```powershell
-.\build_exe.ps1
-```
-*(Wait for the build to finish. The executable will be created at `dist/HadesIIModUI.exe`.)*
-
-### Running the Tool
-Double-click `dist/HadesIIModUI.exe` to launch the application.
 
 ## How to Use
+
+![Interface Screenshot](static/UIdisplay.png)
 
 The user interface is split into **Tabs (Modes)** for configuration, and an **Actions** panel for execution. 
 

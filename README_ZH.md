@@ -8,19 +8,12 @@
 
 `HadesIIModUI` 使用确定性的 Lua 文本转换将补丁插入到 `Content/Scripts` 文件夹中。该应用程序始终确保在应用更改之前进行备份，并在本地的 `.hades2_mod` 工作区中维护状态。
 
-## 快速入门
 
-### 构建工具
-如果你还没有构建，可以通过运行以下命令将 Python 工具编译为独立的 Windows 可执行文件：
-```powershell
-.\build_exe.ps1
-```
-*(等待构建完成。可执行文件将在 `dist/HadesIIModUI.exe` 生成。)*
+## 使用说明
 
-### 运行工具
-双击 `dist/HadesIIModUI.exe` 启动应用程序。
 
-## 如何使用
+![Interface Screenshot](static/UIdisplay.png)
+
 
 用户界面分为用于配置的**选项卡（模式）**和用于执行的**操作**面板。
 
