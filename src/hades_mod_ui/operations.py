@@ -205,8 +205,18 @@ class ModService:
                 return ["TraitData.lua"]
             return []
         if profile == "reward_editor":
-            if any(bool(reward_state.get("enabled")) for reward_state in profile_state.values()):
-                return ["ConsumableData.lua"]
+            enabled_reward_names = [
+                reward_name
+                for reward_name, reward_state in profile_state.items()
+                if bool(reward_state.get("enabled"))
+            ]
+            if enabled_reward_names:
+                return sorted(
+                    {
+                        str(REWARD_EDITOR_ENTRIES[reward_name]["target_file"])
+                        for reward_name in enabled_reward_names
+                    }
+                )
             return []
         if profile == "keepsake_editor":
             if any(bool(keepsake_state.get("enabled")) for keepsake_state in profile_state.values()):
@@ -371,8 +381,22 @@ class ModService:
             }
         if profile == "reward_editor":
             validated_state = self._validate_reward_editor_state(profile_state)
+            target_files = sorted(
+                {
+                    str(REWARD_EDITOR_ENTRIES[reward_name]["target_file"])
+                    for reward_name in REWARD_EDITOR_ORDER
+                    if bool(validated_state[reward_name]["enabled"])
+                }
+            )
             return {
-                "ConsumableData.lua": lambda text: apply_reward_editor_profile(text, validated_state),
+                target_file: (
+                    lambda text, _target_file=target_file: apply_reward_editor_profile(
+                        text,
+                        validated_state,
+                        _target_file,
+                    )
+                )
+                for target_file in target_files
             }
         if profile == "keepsake_editor":
             validated_state = self._validate_keepsake_editor_state(profile_state)

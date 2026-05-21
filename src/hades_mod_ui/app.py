@@ -94,9 +94,11 @@ STATIC_TEXT_TRANSLATIONS: dict[str, str] = {
         "Primary fields change the real pickup reward. Advanced metadata is optional and hidden by default."
     ): "编辑 ConsumableData.lua 中全局战斗结算奖励。主字段影响实际拾取奖励，高级元数据为可选且默认隐藏。",
     "Only core money, health, and mana reward definitions are included in this v1 editor.": "此 v1 编辑器仅包含金币、生命和法力奖励的核心定义。",
+    "Includes money/health/mana plus configurable gameplay resources (e.g. Psyche, Bones, Ashes, Nectar, ores, and Shadow).": "包含金币/生命/法力以及可配置的玩法资源（如 Psyche、Bones、Ashes、Nectar、矿石和 Shadow）。",
     "Money": "金币",
     "Health": "生命",
     "Mana": "法力",
+    "Resource": "资源",
     "Show advanced metadata": "显示高级元数据",
     (
         "Configure per-keepsake buffs for TraitData_Keepsake.lua. "
@@ -755,7 +757,10 @@ class HadesModUI(tk.Tk):
 
         ttk.Label(
             scrollable,
-            text="Only core money, health, and mana reward definitions are included in this v1 editor.",
+            text=(
+                "Includes money/health/mana plus configurable gameplay resources "
+                "(e.g. Psyche, Bones, Ashes, Nectar, ores, and Shadow)."
+            ),
             foreground="#0b5cad",
             font=("Segoe UI", 10, "bold"),
         ).grid(row=1, column=0, sticky="w", pady=(8, 12))
@@ -769,7 +774,8 @@ class HadesModUI(tk.Tk):
 
             for section_row, reward_name in enumerate(reward_names):
                 reward_meta = REWARD_EDITOR_ENTRIES[reward_name]
-                frame = ttk.LabelFrame(section_frame, text=reward_name, padding=12)
+                display_name = str(reward_meta.get("display_name", reward_name))
+                frame = ttk.LabelFrame(section_frame, text=display_name, padding=12)
                 frame.grid(row=section_row, column=0, sticky="ew", pady=(0, 8))
                 frame.columnconfigure(1, weight=1)
 

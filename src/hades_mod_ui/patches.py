@@ -203,7 +203,11 @@ def apply_weapon_damage_profile(text: str, weapon_damage_state: dict[str, dict[s
     return text[:section_start] + section_text + text[section_end:]
 
 
-def apply_reward_editor_profile(text: str, reward_editor_state: dict[str, dict[str, str | bool]]) -> str:
+def apply_reward_editor_profile(
+    text: str,
+    reward_editor_state: dict[str, dict[str, str | bool]],
+    target_file: str,
+) -> str:
     updated = text
     for reward_name in REWARD_EDITOR_ORDER:
         reward_state = reward_editor_state[reward_name]
@@ -211,17 +215,30 @@ def apply_reward_editor_profile(text: str, reward_editor_state: dict[str, dict[s
             continue
 
         reward_meta = REWARD_EDITOR_ENTRIES[reward_name]
-        updated = replace_scalar_field_in_named_section(
-            updated,
-            reward_name,
-            reward_meta["amount_field"],
-            str(reward_state["value"]),
-        )
+        if reward_meta["target_file"] != target_file:
+            continue
+
+        patch_kind = reward_meta["patch_kind"]
+        if patch_kind == "section_field":
+            updated = replace_field_in_named_section(
+                updated,
+                str(reward_meta["section_name"]),
+                str(reward_meta["field_path"]),
+                str(reward_state["value"]),
+            )
+        elif patch_kind == "pickaxe_max_health_by_resource":
+            updated = replace_pickaxe_max_health_by_resource(
+                updated,
+                str(reward_meta["resource_name"]),
+                str(reward_state["value"]),
+            )
+        else:
+            raise PatchError(f"Unsupported reward patch kind '{patch_kind}' for '{reward_name}'.")
 
         if reward_state.get("show_advanced") and "resource_cost_money" in reward_meta:
             updated = replace_resource_cost_money_in_named_section(
                 updated,
-                reward_name,
+                str(reward_meta["section_name"]),
                 str(reward_state["resource_cost_money"]),
             )
     return updated
@@ -518,6 +535,50 @@ def replace_resource_cost_money_in_named_section(
     updated_resource_text = replace_unique_scalar_field(resource_text, "Money", value)
     updated_section = section_text[:resource_start] + updated_resource_text + section_text[resource_end:]
     return text[:section_start] + updated_section + text[section_end:]
+
+
+def replace_pickaxe_max_health_by_resource(
+    text: str,
+    resource_name: str,
+    value: str,
+) -> str:
+    resource_pattern = re.compile(
+        rf'(?m)^([ \t]*)ResourceName\s*=\s*"{re.escape(resource_name)}",\s*$'
+    )
+    matches = list(resource_pattern.finditer(text))
+    if len(matches) != 1:
+        raise PatchError(
+            f"Expected exactly one PickaxePointData entry for ResourceName '{resource_name}', found {len(matches)}."
+        )
+
+    resource_match = matches[0]
+    block_start_pattern = re.compile(r"(?m)^([ \t]*)\{\s*$")
+    chosen_start = None
+    chosen_end = None
+    chosen_size = None
+
+    for block_match in block_start_pattern.finditer(text, 0, resource_match.start()):
+        open_brace_index = text.find("{", block_match.start(), block_match.end())
+        close_brace_index = find_matching_brace(text, open_brace_index)
+        if not (open_brace_index < resource_match.start() < close_brace_index):
+            continue
+        block_text = text[block_match.start() : close_brace_index + 1]
+        if f'ResourceName = "{resource_name}"' not in block_text:
+            continue
+        if "MaxHealth" not in block_text:
+            continue
+        block_size = close_brace_index - block_match.start()
+        if chosen_size is None or block_size < chosen_size:
+            chosen_size = block_size
+            chosen_start = block_match.start()
+            chosen_end = close_brace_index
+
+    if chosen_start is None or chosen_end is None:
+        raise PatchError(f"Could not locate PickaxePointData option block for ResourceName '{resource_name}'.")
+
+    option_text = text[chosen_start : chosen_end + 1]
+    updated_option_text = replace_unique_scalar_field(option_text, "MaxHealth", value)
+    return text[:chosen_start] + updated_option_text + text[chosen_end + 1 :]
 
 
 def patch_dummy_weapon_trait(
