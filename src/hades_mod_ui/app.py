@@ -13,6 +13,7 @@ from .state import (
     KEEPSAKE_EDITOR_ORDER,
     REWARD_EDITOR_ENTRIES,
     REWARD_EDITOR_SECTIONS,
+    REFRESH_FEATURE_ORDER,
     StateStore,
     WEAPON_DAMAGE_WEAPONS,
 )
@@ -61,6 +62,7 @@ STATIC_TEXT_TRANSLATIONS: dict[str, str] = {
     "Weapon Damage": "武器伤害",
     "Reward Amounts": "奖励数值",
     "Keepsake": "信物",
+    "Refresh": "刷新",
     "Actions": "操作",
     "1. Backup Originals": "1. 备份原始文件",
     "2. Generate Copies": "2. 生成副本",
@@ -119,6 +121,7 @@ EXACT_ERROR_TRANSLATIONS: dict[str, str] = {
     "Enable at least one weapon damage patch before generating copies.": "请先启用至少一个武器伤害补丁后再生成副本。",
     "Enable at least one reward amount patch before generating copies.": "请先启用至少一个奖励数值补丁后再生成副本。",
     "Enable at least one keepsake patch before generating copies.": "请先启用至少一个信物补丁后再生成副本。",
+    "Enable at least one refresh patch before generating copies.": "请先启用至少一个刷新补丁后再生成副本。",
     "Select at least one rarity source before generating copies.": "请先选择至少一个稀有度来源后再生成副本。",
     "There are no target files to back up for the current selection.": "当前选择没有可备份的目标文件。",
     "There are no generated files to apply.": "没有可应用的生成文件。",
@@ -183,12 +186,14 @@ class HadesModUI(tk.Tk):
         self.weapon_damage_profile_key = "weapon_damage"
         self.keepsake_profile_key = "keepsake_editor"
         self.boon_multiplier_profile_key = "boon_multiplier"
+        self.refresh_profile_key = "refresh"
         self.initial_stats_vars: dict[str, Any] = {}
         self.rarity_editor_vars: dict[str, dict[str, Any]] = {}
         self.reward_editor_vars: dict[str, dict[str, Any]] = {}
         self.weapon_damage_vars: dict[str, dict[str, Any]] = {}
         self.keepsake_editor_vars: dict[str, dict[str, Any]] = {}
         self.boon_multiplier_vars: dict[str, dict[str, Any]] = {}
+        self.refresh_vars: dict[str, dict[str, Any]] = {}
         self.preview_list_var = tk.StringVar(value=[])
         self.notebook_tab_profiles = (
             self.initial_stats_profile_key,
@@ -197,6 +202,7 @@ class HadesModUI(tk.Tk):
             self.weapon_damage_profile_key,
             self.reward_profile_key,
             self.keepsake_profile_key,
+            self.refresh_profile_key,
         )
         self.notebook_tab_labels = (
             "Initial Stats",
@@ -205,6 +211,7 @@ class HadesModUI(tk.Tk):
             "Weapon Damage",
             "Reward Amounts",
             "Keepsake",
+            "Refresh",
         )
 
         self._configure_styles()
@@ -404,12 +411,14 @@ class HadesModUI(tk.Tk):
         self.weapon_damage_frame = ttk.Frame(self.notebook, padding=12)
         self.reward_frame = ttk.Frame(self.notebook, padding=12)
         self.keepsake_frame = ttk.Frame(self.notebook, padding=12)
+        self.refresh_frame = ttk.Frame(self.notebook, padding=12)
         self.notebook.add(self.initial_stats_frame, text=self.notebook_tab_labels[0])
         self.notebook.add(self.rarity_frame, text=self.notebook_tab_labels[1])
         self.notebook.add(self.boon_multiplier_frame, text=self.notebook_tab_labels[2])
         self.notebook.add(self.weapon_damage_frame, text=self.notebook_tab_labels[3])
         self.notebook.add(self.reward_frame, text=self.notebook_tab_labels[4])
         self.notebook.add(self.keepsake_frame, text=self.notebook_tab_labels[5])
+        self.notebook.add(self.refresh_frame, text=self.notebook_tab_labels[6])
 
         self._build_initial_stats_tab()
         self._build_rarity_tab()
@@ -417,6 +426,7 @@ class HadesModUI(tk.Tk):
         self._build_weapon_damage_tab()
         self._build_reward_tab()
         self._build_keepsake_tab()
+        self._build_refresh_tab()
 
         pinned_bottom = ttk.Frame(outer, padding=12)
         pinned_bottom.grid(row=1, column=0, columnspan=2, sticky="ew")
@@ -929,6 +939,39 @@ class HadesModUI(tk.Tk):
             }
             self._update_keepsake_advanced_visibility(keepsake_name)
 
+    def _build_refresh_tab(self) -> None:
+        scrollable = self._create_scrollable_tab(self.refresh_frame)
+        scrollable.columnconfigure(0, weight=1)
+
+        ttk.Label(
+            scrollable,
+            text="Current-version-safe community patches for rerolls and exotic market stock.",
+            wraplength=850,
+            justify="left",
+        ).grid(row=0, column=0, sticky="w")
+
+        ttk.Label(
+            scrollable,
+            text="Enable only the refresh behaviors you want to generate.",
+            foreground="#0b5cad",
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=1, column=0, sticky="w", pady=(8, 12))
+
+        current_row = 2
+        for feature_key, title in REFRESH_FEATURE_ORDER:
+            frame = ttk.LabelFrame(scrollable, text=title, padding=12)
+            frame.grid(row=current_row, column=0, sticky="ew", pady=(0, 8))
+            frame.columnconfigure(0, weight=1)
+            current_row += 1
+
+            enabled_var = tk.BooleanVar(value=False)
+            ttk.Checkbutton(frame, text="Enable patch", variable=enabled_var).grid(
+                row=0, column=0, sticky="w"
+            )
+            enabled_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+            self.refresh_vars[feature_key] = {"enabled": enabled_var}
+
     def _create_scrollable_tab(self, parent: ttk.Frame) -> ttk.Frame:
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(0, weight=1)
@@ -1012,6 +1055,11 @@ class HadesModUI(tk.Tk):
             for field_id, field_var in vars_for_keepsake["fields"].items():
                 field_var.set(str(source_state["fields"][field_id]))
             self._update_keepsake_advanced_visibility(keepsake_name)
+
+        refresh_state = self.state["profiles"][self.refresh_profile_key]
+        for feature_key, vars_for_feature in self.refresh_vars.items():
+            source_state = refresh_state.get(feature_key, {})
+            vars_for_feature["enabled"].set(bool(source_state.get("enabled", False)))
 
     def _refresh_header_state(self) -> None:
         valid, message = self.service.validate_scripts_dir()
@@ -1115,6 +1163,8 @@ class HadesModUI(tk.Tk):
             return self._collect_reward_editor_state()
         if profile == self.keepsake_profile_key:
             return self._collect_keepsake_editor_state()
+        if profile == self.refresh_profile_key:
+            return self._collect_refresh_state()
         return copy.deepcopy(self.state["profiles"].get(profile, {}))
 
     def _collect_keepsake_editor_state(self) -> dict[str, Any]:
@@ -1130,6 +1180,14 @@ class HadesModUI(tk.Tk):
             collected[keepsake_name] = keepsake_state
         return collected
 
+    def _collect_refresh_state(self) -> dict[str, Any]:
+        collected: dict[str, Any] = {}
+        for feature_key, vars_for_feature in self.refresh_vars.items():
+            collected[feature_key] = {
+                "enabled": bool(vars_for_feature["enabled"].get()),
+            }
+        return collected
+
     def _persist_ui_state(self) -> tuple[str, dict[str, Any]]:
         self.state["profiles"][self.initial_stats_profile_key] = self._collect_initial_stats_state()
         self.state["profiles"]["rarity_editor"] = self._collect_rarity_editor_state()
@@ -1137,6 +1195,7 @@ class HadesModUI(tk.Tk):
         self.state["profiles"]["weapon_damage"] = self._collect_weapon_damage_state()
         self.state["profiles"][self.reward_profile_key] = self._collect_reward_editor_state()
         self.state["profiles"][self.keepsake_profile_key] = self._collect_keepsake_editor_state()
+        self.state["profiles"][self.refresh_profile_key] = self._collect_refresh_state()
         self._capture_pane_positions()
         self.service.save_state(self.state)
         profile = self._current_profile()

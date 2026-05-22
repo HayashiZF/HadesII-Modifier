@@ -120,6 +120,19 @@ DEFAULT_WEAPON_DAMAGE_STATE: dict[str, dict[str, Any]] = {
     for weapon_name in WEAPON_DAMAGE_WEAPONS
 }
 
+REFRESH_FEATURE_ORDER: tuple[tuple[str, str], ...] = (
+    ("hammer_refreshable", "Daedalus Hammer Refreshable"),
+    ("npc_boon_refreshable", "NPC Boon Refreshable"),
+    ("unlimited_exotic_goods", "Unlimited Exotic Goods"),
+)
+
+DEFAULT_REFRESH_STATE: dict[str, dict[str, Any]] = {
+    feature_key: {
+        "enabled": False,
+    }
+    for feature_key, _title in REFRESH_FEATURE_ORDER
+}
+
 REWARD_EDITOR_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Money",
@@ -1730,6 +1743,7 @@ DEFAULT_STATE: dict[str, Any] = {
         },
         "initial_stats": DEFAULT_INITIAL_STATS_STATE,
         "rarity_editor": DEFAULT_RARITY_EDITOR_STATE,
+        "refresh": DEFAULT_REFRESH_STATE,
         "reward_editor": DEFAULT_REWARD_EDITOR_STATE,
         "weapon_damage": DEFAULT_WEAPON_DAMAGE_STATE,
         "keepsake_editor": DEFAULT_KEEPSAKE_EDITOR_STATE,

@@ -81,6 +81,16 @@ WEAPON_DAMAGE_FAMILY_MAP: dict[str, list[str]] = {
     ],
 }
 
+REFRESH_NPC_CHOICE_FUNCTIONS: tuple[str, ...] = (
+    "EchoChoice",
+    "ArachneCostumeChoice",
+    "NarcissusBenefitChoice",
+    "MedeaCurseChoice",
+    "CirceBlessingChoice",
+    "IcarusBenefitChoice",
+    "EchoLastRunBoon",
+)
+
 
 def detect_newline(text: str) -> str:
     return "\r\n" if "\r\n" in text else "\n"
@@ -201,6 +211,116 @@ def apply_weapon_damage_profile(text: str, weapon_damage_state: dict[str, dict[s
         )
 
     return text[:section_start] + section_text + text[section_end:]
+
+
+def apply_refresh_hammer_profile(text: str) -> str:
+    pattern = re.compile(r"(?m)^([ \t]*)Hammer\s*=\s*-?1,\s*(?:--.*)?$")
+    matches = list(pattern.finditer(text))
+    if len(matches) != 1:
+        raise PatchError(f"Expected exactly one hammer reroll entry, found {len(matches)}.")
+
+    indent = matches[0].group(1)
+    replacement = f"{indent}Hammer = 1, -- Enabled"
+    return text[: matches[0].start()] + replacement + text[matches[0].end() :]
+
+
+def apply_refresh_event_logic_profile(text: str) -> str:
+    pattern = re.compile(r"(?m)^([ \t]*)source\.BlockReroll\s*=\s*(?:true|false)\s*$")
+    matches = list(pattern.finditer(text))
+    if len(matches) != len(REFRESH_NPC_CHOICE_FUNCTIONS):
+        raise PatchError(
+            f"Expected {len(REFRESH_NPC_CHOICE_FUNCTIONS)} BlockReroll lines, found {len(matches)}."
+        )
+    return pattern.sub(r"\1source.BlockReroll = false", text)
+
+
+def apply_refresh_market_logic_profile(text: str) -> str:
+    newline = detect_newline(text)
+    updated = text
+
+    condition_old = (
+        "if args.RefreshOncePerRun == category.RefreshOncePerRun and "
+        "(args.CategoryIndex or categoryIndex) == categoryIndex then"
+    )
+    condition_new = (
+        "if ( category.RefreshOncePerRun and args.RefreshOncePerRun ) or "
+        "( not category.RefreshOncePerRun and not args.RefreshOncePerRun ) then"
+    )
+    if condition_old in updated:
+        updated = updated.replace(condition_old, condition_new, 1)
+    elif condition_new not in updated:
+        raise PatchError("Could not find market refresh category anchor.")
+
+    category_refresh_call = f"\tGenerateMarketItems( screen, {{ CategoryIndex = categoryIndex }} ){newline}"
+    if category_refresh_call in updated:
+        updated = updated.replace(category_refresh_call, "", 1)
+    elif "GenerateMarketItems( screen, { CategoryIndex = categoryIndex } )" in updated:
+        raise PatchError("Market category refresh call was found with unexpected formatting.")
+
+    refresh_marker = "\t-- HadesIIModUI Refresh Start"
+    if refresh_marker not in updated:
+        open_anchor = f"\tscreen.ActiveCategoryIndex = args.DefaultCategoryIndex or 1{newline}"
+        refresh_block = (
+            f"{refresh_marker}{newline}"
+            f"\tGenerateMarketItems(){newline}"
+            f"\t-- HadesIIModUI Refresh End{newline}"
+        )
+        if open_anchor not in updated:
+            raise PatchError("Could not find market screen open anchor.")
+        updated = updated.replace(open_anchor, open_anchor + newline + refresh_block, 1)
+
+    purchase_fail_old = (
+        f"\tif not HasResources( item.Cost ) then{newline}"
+        f"\t\tMarketPurchaseFailPresentation( screen, button ){newline}"
+        f"\t\treturn{newline}"
+        f"\tend{newline}"
+    )
+    purchase_fail_new = (
+        f"\tif not HasResources( item.Cost ) then{newline}"
+        f"\t\tMarketPurchaseFailPresentation( screen, button ){newline}"
+        f"\tend{newline}"
+    )
+    if purchase_fail_old in updated:
+        updated = updated.replace(purchase_fail_old, purchase_fail_new, 1)
+    elif purchase_fail_new not in updated:
+        raise PatchError("Could not find market purchase affordability anchor.")
+
+    sold_out_old = (
+        f"\t\titem.SoldOut = true{newline}"
+        f"\t\tUseableOff({{ Ids = buttonIds }}){newline}"
+        f"\t\tSetAlpha({{ Ids = buttonIds, Fraction = 0, Duration = 0.2 }}){newline}"
+        f"\t\tModifyTextBox({{ Ids = buttonIds, FadeTarget = 0 }}){newline}"
+        f"\t\tUpdateMarketScreenInteractionText( screen ){newline}"
+    )
+    sold_out_new = (
+        f"\t\titem.SoldOut = false{newline}"
+        f"\t\tMarketPurchaseSuccessRepeatablePresentation( button ){newline}"
+    )
+    if sold_out_old in updated:
+        updated = updated.replace(sold_out_old, sold_out_new, 1)
+    elif sold_out_new not in updated:
+        raise PatchError("Could not find market sold-out anchor.")
+
+    hide_unaffordable_old = (
+        f"\tif category.HideUnaffordable and not HasResources( item.Cost ) then{newline}"
+        f"\t\titem.SoldOut = true{newline}"
+        f"\t\tUseableOff({{ Ids = buttonIds }}){newline}"
+        f"\t\tSetAlpha({{ Ids = buttonIds, Fraction = 0, Duration = 0.2 }}){newline}"
+        f"\t\tModifyTextBox({{ Ids = buttonIds, FadeTarget = 0 }}){newline}"
+        f"\t\tUpdateMarketScreenInteractionText( screen ){newline}"
+        f"\tend{newline}"
+    )
+    hide_unaffordable_new = (
+        f"\tif category.HideUnaffordable and not HasResources( item.Cost ) then{newline}"
+        f"\t\titem.SoldOut = false{newline}"
+        f"\tend{newline}"
+    )
+    if hide_unaffordable_old in updated:
+        updated = updated.replace(hide_unaffordable_old, hide_unaffordable_new, 1)
+    elif hide_unaffordable_new not in updated:
+        raise PatchError("Could not find market hide-unaffordable anchor.")
+
+    return updated
 
 
 def apply_reward_editor_profile(
@@ -468,7 +588,6 @@ def replace_unique_scalar_field(
     indent = match.group(1)
     replacement = f"{indent}{field_name} = {value},"
     return text[: match.start()] + replacement + text[match.end() :]
-
 
 def calculate_lua_brace_depth_before_index(text: str, stop_index: int) -> int:
     depth = 0

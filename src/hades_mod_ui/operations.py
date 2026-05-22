@@ -13,6 +13,9 @@ from .patches import (
     apply_initial_stats_hero_data_profile,
     apply_initial_stats_run_logic_profile,
     apply_keepsake_editor_profile,
+    apply_refresh_event_logic_profile,
+    apply_refresh_hammer_profile,
+    apply_refresh_market_logic_profile,
     apply_reward_editor_profile,
     WEAPON_DAMAGE_FAMILY_MAP,
     apply_epic_preset,
@@ -37,10 +40,12 @@ from .state import (
     DEFAULT_INITIAL_STATS_STATE,
     DEFAULT_KEEPSAKE_EDITOR_STATE,
     DEFAULT_RARITY_EDITOR_STATE,
+    DEFAULT_REFRESH_STATE,
     DEFAULT_REWARD_EDITOR_STATE,
     DEFAULT_WEAPON_DAMAGE_STATE,
     KEEPSAKE_EDITOR_CONFIG,
     KEEPSAKE_EDITOR_ORDER,
+    REFRESH_FEATURE_ORDER,
     REWARD_EDITOR_ENTRIES,
     REWARD_EDITOR_ORDER,
     StateStore,
@@ -73,6 +78,9 @@ class ModService:
 
     def default_initial_stats_state(self) -> dict[str, Any]:
         return copy.deepcopy(DEFAULT_INITIAL_STATS_STATE)
+
+    def default_refresh_state(self) -> dict[str, Any]:
+        return copy.deepcopy(DEFAULT_REFRESH_STATE)
 
     def load_state(self) -> dict[str, Any]:
         return self.state_store.load()
@@ -204,6 +212,15 @@ class ModService:
             if any(bool(weapon_state.get("enabled")) for weapon_state in profile_state.values()):
                 return ["TraitData.lua"]
             return []
+        if profile == "refresh":
+            targets: list[str] = []
+            if bool(profile_state.get("hammer_refreshable", {}).get("enabled")):
+                targets.append("MetaUpgradeData.lua")
+            if bool(profile_state.get("npc_boon_refreshable", {}).get("enabled")):
+                targets.append("EventLogic.lua")
+            if bool(profile_state.get("unlimited_exotic_goods", {}).get("enabled")):
+                targets.append("MarketLogic.lua")
+            return sorted(set(targets))
         if profile == "reward_editor":
             enabled_reward_names = [
                 reward_name
@@ -260,6 +277,8 @@ class ModService:
                 raise OperationError("Enable at least one reward amount patch before generating copies.")
             if profile == "keepsake_editor":
                 raise OperationError("Enable at least one keepsake patch before generating copies.")
+            if profile == "refresh":
+                raise OperationError("Enable at least one refresh patch before generating copies.")
             raise OperationError("Select at least one rarity source before generating copies.")
 
         generators = self._build_generators(profile, profile_state)
@@ -409,6 +428,16 @@ class ModService:
                 "HeroData.lua": lambda text: apply_initial_stats_hero_data_profile(text, validated_state),
                 "RunLogic.lua": lambda text: apply_initial_stats_run_logic_profile(text, validated_state),
             }
+        if profile == "refresh":
+            validated_state = self._validate_refresh_state(profile_state)
+            generators: dict[str, Callable[[str], str]] = {}
+            if validated_state["hammer_refreshable"]["enabled"]:
+                generators["MetaUpgradeData.lua"] = apply_refresh_hammer_profile
+            if validated_state["npc_boon_refreshable"]["enabled"]:
+                generators["EventLogic.lua"] = apply_refresh_event_logic_profile
+            if validated_state["unlimited_exotic_goods"]["enabled"]:
+                generators["MarketLogic.lua"] = apply_refresh_market_logic_profile
+            return generators
 
         validated_state = self._validate_rarity_editor_state(profile_state)
         generators: dict[str, Callable[[str], str]] = {}
@@ -571,6 +600,15 @@ class ModService:
             str(validated.get("starting_money", "")).strip(),
             "initial_stats.starting_money",
         )
+        return validated
+
+    def _validate_refresh_state(self, refresh_state: dict[str, Any]) -> dict[str, Any]:
+        validated = copy.deepcopy(refresh_state)
+        for feature_key, _title in REFRESH_FEATURE_ORDER:
+            if feature_key not in validated:
+                raise OperationError(f"Missing refresh configuration for {feature_key}.")
+            feature_state = validated[feature_key]
+            feature_state["enabled"] = bool(feature_state.get("enabled"))
         return validated
 
     def _build_boon_multiplier_generators(
