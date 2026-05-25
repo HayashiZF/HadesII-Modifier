@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 
 from .state import (
@@ -403,6 +404,223 @@ def apply_initial_stats_run_logic_profile(text: str, initial_stats_state: dict[s
     )
 
 
+def apply_arcana_meta_upgrade_data_profile(
+    text: str,
+    arcana_editor_state: dict[str, Any],
+    card_trait_map: dict[str, str],
+) -> str:
+    del card_trait_map  # Mapping is used by the trait patch path only.
+
+    grasp_growth_multiplier = _parse_lua_numeric_expression(
+        str(arcana_editor_state["grasp_growth_multiplier"])
+    )
+    unlock_upgrade_cost_multiplier = _parse_lua_numeric_expression(
+        str(arcana_editor_state["unlock_upgrade_cost_multiplier"])
+    )
+    starting_grasp_limit = str(arcana_editor_state["starting_grasp_limit"])
+
+    updated = text
+    meta_cost_start, meta_cost_end = find_section_bounds(updated, "MetaUpgradeCostData")
+    meta_cost_text = updated[meta_cost_start:meta_cost_end]
+    starting_grasp_pattern = re.compile(
+        r"(?m)^([ \t]*StartingMetaUpgradeLimit\s*=\s*)([^,\r\n]+)(,\s*(?:--[^\r\n]*)?)$"
+    )
+    starting_grasp_matches = list(starting_grasp_pattern.finditer(meta_cost_text))
+    if len(starting_grasp_matches) != 1:
+        raise PatchError(
+            "Expected exactly one 'StartingMetaUpgradeLimit' field in MetaUpgradeCostData."
+        )
+    starting_grasp_match = starting_grasp_matches[0]
+    meta_cost_text = (
+        meta_cost_text[: starting_grasp_match.start()]
+        + starting_grasp_match.group(1)
+        + starting_grasp_limit
+        + starting_grasp_match.group(3)
+        + meta_cost_text[starting_grasp_match.end() :]
+    )
+
+    level_start, level_end = find_section_bounds(meta_cost_text, "MetaUpgradeLevelData")
+    level_text = meta_cost_text[level_start:level_end]
+    level_text = scale_named_assignments_in_text(
+        level_text,
+        "CostIncrease",
+        grasp_growth_multiplier,
+        integer_output=True,
+        min_non_zero=True,
+    )
+    meta_cost_text = meta_cost_text[:level_start] + level_text + meta_cost_text[level_end:]
+    updated = updated[:meta_cost_start] + meta_cost_text + updated[meta_cost_end:]
+
+    card_data_start, card_data_end = find_section_bounds(updated, "MetaUpgradeCardData")
+    card_data_text = updated[card_data_start:card_data_end]
+    for card_name in arcana_editor_state["effect_multipliers"].keys():
+        card_start, card_end = find_section_bounds(card_data_text, card_name)
+        card_text = card_data_text[card_start:card_end]
+        for table_name in ("ResourceCost", "UpgradeResourceCost"):
+            if count_multiline_section_headers(card_text, table_name) == 0:
+                continue
+            table_start, table_end = find_section_bounds(card_text, table_name)
+            table_text = card_text[table_start:table_end]
+            table_text = scale_all_assignment_values_in_text(
+                table_text,
+                unlock_upgrade_cost_multiplier,
+                integer_output=True,
+                min_non_zero=True,
+            )
+            card_text = card_text[:table_start] + table_text + card_text[table_end:]
+        card_data_text = card_data_text[:card_start] + card_text + card_data_text[card_end:]
+
+    updated = updated[:card_data_start] + card_data_text + updated[card_data_end:]
+
+    return updated
+
+
+def apply_arcana_trait_data_profile(
+    text: str,
+    arcana_editor_state: dict[str, Any],
+    card_trait_map: dict[str, str],
+) -> str:
+    updated = text
+    effect_multipliers = arcana_editor_state["effect_multipliers"]
+    for card_name, trait_name in card_trait_map.items():
+        if card_name not in effect_multipliers:
+            continue
+        effect_multiplier = _parse_lua_numeric_expression(str(effect_multipliers[card_name]))
+        trait_start, trait_end = find_section_bounds(updated, trait_name)
+        trait_text = updated[trait_start:trait_end]
+        if count_multiline_section_headers(trait_text, "RarityLevels") == 0:
+            continue
+        rarity_levels_start, rarity_levels_end = find_section_bounds(trait_text, "RarityLevels")
+        rarity_levels_text = trait_text[rarity_levels_start:rarity_levels_end]
+        for rarity_key in ("Common", "Rare", "Epic", "Heroic"):
+            if count_multiline_section_headers(rarity_levels_text, rarity_key) == 0:
+                continue
+            rarity_start, rarity_end = find_section_bounds(rarity_levels_text, rarity_key)
+            rarity_text = rarity_levels_text[rarity_start:rarity_end]
+            rarity_text = scale_all_scalar_assignments_in_block(
+                rarity_text,
+                "Multiplier",
+                effect_multiplier,
+                integer_output=False,
+                min_non_zero=False,
+            )
+            rarity_levels_text = (
+                rarity_levels_text[:rarity_start] + rarity_text + rarity_levels_text[rarity_end:]
+            )
+        trait_text = trait_text[:rarity_levels_start] + rarity_levels_text + trait_text[rarity_levels_end:]
+        updated = updated[:trait_start] + trait_text + updated[trait_end:]
+    return updated
+
+
+def _parse_lua_numeric_expression(raw_value: str) -> float:
+    value = raw_value.strip()
+    if not value:
+        raise PatchError("Numeric expression cannot be empty.")
+    if not re.fullmatch(r"[+-]?\d+(?:\.\d+)?(?:\s*/\s*[+-]?\d+(?:\.\d+)?)*", value):
+        raise PatchError(f"Unsupported expression '{raw_value}'.")
+    parts = re.split(r"\s*/\s*", value)
+    result = float(parts[0])
+    for part in parts[1:]:
+        divisor = float(part)
+        if divisor == 0:
+            raise PatchError(f"Invalid division by zero in expression '{raw_value}'.")
+        result /= divisor
+    return result
+
+
+def _round_half_up(value: float) -> int:
+    if value >= 0:
+        return int(math.floor(value + 0.5))
+    return int(math.ceil(value - 0.5))
+
+
+def _format_float(value: float) -> str:
+    if abs(value) < 1e-12:
+        return "0"
+    text = f"{value:.10f}".rstrip("0").rstrip(".")
+    return text if text else "0"
+
+
+def scale_all_assignment_values_in_text(
+    text: str,
+    multiplier: float,
+    *,
+    integer_output: bool,
+    min_non_zero: bool,
+) -> str:
+    pattern = re.compile(r"(=\s*)([+-]?\d+(?:\.\d+)?(?:\s*/\s*[+-]?\d+(?:\.\d+)?)*)")
+
+    def repl(match: re.Match[str]) -> str:
+        original_value = _parse_lua_numeric_expression(match.group(2))
+        scaled = original_value * multiplier
+        if integer_output:
+            rounded = _round_half_up(scaled)
+            if min_non_zero and original_value > 0 and rounded < 1:
+                rounded = 1
+            return f"{match.group(1)}{rounded}"
+        return f"{match.group(1)}{_format_float(scaled)}"
+
+    return pattern.sub(repl, text)
+
+
+def scale_all_scalar_assignments_in_block(
+    text: str,
+    field_name: str,
+    multiplier: float,
+    *,
+    integer_output: bool,
+    min_non_zero: bool,
+) -> str:
+    pattern = re.compile(rf"(?m)^([ \t]*{re.escape(field_name)}\s*=\s*)([^,\r\n]+)(,?\s*)$")
+
+    def repl(match: re.Match[str]) -> str:
+        original_value = _parse_lua_numeric_expression(match.group(2))
+        scaled = original_value * multiplier
+        if integer_output:
+            rounded = _round_half_up(scaled)
+            if min_non_zero and original_value > 0 and rounded < 1:
+                rounded = 1
+            rendered = str(rounded)
+        else:
+            rendered = _format_float(scaled)
+        return f"{match.group(1)}{rendered}{match.group(3)}"
+
+    matches = list(pattern.finditer(text))
+    if not matches:
+        raise PatchError(f"Expected at least one '{field_name}' assignment to patch.")
+    return pattern.sub(repl, text)
+
+
+def scale_named_assignments_in_text(
+    text: str,
+    field_name: str,
+    multiplier: float,
+    *,
+    integer_output: bool,
+    min_non_zero: bool,
+) -> str:
+    pattern = re.compile(
+        rf"(\b{re.escape(field_name)}\s*=\s*)([+-]?\d+(?:\.\d+)?(?:\s*/\s*[+-]?\d+(?:\.\d+)?)*)"
+    )
+
+    def repl(match: re.Match[str]) -> str:
+        original_value = _parse_lua_numeric_expression(match.group(2))
+        scaled = original_value * multiplier
+        if integer_output:
+            rounded = _round_half_up(scaled)
+            if min_non_zero and original_value > 0 and rounded < 1:
+                rounded = 1
+            rendered = str(rounded)
+        else:
+            rendered = _format_float(scaled)
+        return f"{match.group(1)}{rendered}"
+
+    matches = list(pattern.finditer(text))
+    if not matches:
+        raise PatchError(f"Expected at least one '{field_name}' assignment to patch.")
+    return pattern.sub(repl, text)
+
+
 def replace_table_in_section(
     text: str,
     section_name: str,
@@ -755,7 +973,9 @@ def insert_weapon_damage_block(
 
 
 def find_section_bounds(text: str, section_name: str) -> tuple[int, int]:
-    pattern = re.compile(rf"(?m)^([ \t]*){re.escape(section_name)}\s*=\s*(?:\{{\s*)?$")
+    pattern = re.compile(
+        rf"(?m)^([ \t]*){re.escape(section_name)}\s*=\s*(?:\{{\s*)?(?:--[^\r\n]*)?$"
+    )
     match = pattern.search(text)
     if not match:
         raise PatchError(f"Could not find section '{section_name}'.")

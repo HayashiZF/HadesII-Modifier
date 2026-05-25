@@ -9,6 +9,7 @@ from typing import Any
 from .operations import ModService, OperationError
 from .paths import build_app_paths
 from .state import (
+    ARCANA_CARD_ORDER,
     KEEPSAKE_EDITOR_CONFIG,
     KEEPSAKE_EDITOR_ORDER,
     REWARD_EDITOR_ENTRIES,
@@ -184,6 +185,7 @@ class HadesModUI(tk.Tk):
         self.initial_stats_profile_key = "initial_stats"
         self.reward_profile_key = "reward_editor"
         self.weapon_damage_profile_key = "weapon_damage"
+        self.arcana_profile_key = "arcana_editor"
         self.keepsake_profile_key = "keepsake_editor"
         self.boon_multiplier_profile_key = "boon_multiplier"
         self.refresh_profile_key = "refresh"
@@ -191,6 +193,7 @@ class HadesModUI(tk.Tk):
         self.rarity_editor_vars: dict[str, dict[str, Any]] = {}
         self.reward_editor_vars: dict[str, dict[str, Any]] = {}
         self.weapon_damage_vars: dict[str, dict[str, Any]] = {}
+        self.arcana_editor_vars: dict[str, Any] = {}
         self.keepsake_editor_vars: dict[str, dict[str, Any]] = {}
         self.boon_multiplier_vars: dict[str, dict[str, Any]] = {}
         self.refresh_vars: dict[str, dict[str, Any]] = {}
@@ -200,6 +203,7 @@ class HadesModUI(tk.Tk):
             "rarity_editor",
             self.boon_multiplier_profile_key,
             self.weapon_damage_profile_key,
+            self.arcana_profile_key,
             self.reward_profile_key,
             self.keepsake_profile_key,
             self.refresh_profile_key,
@@ -209,6 +213,7 @@ class HadesModUI(tk.Tk):
             "Rarity",
             "Boon Multipliers",
             "Weapon Damage",
+            "Arcana",
             "Reward Amounts",
             "Keepsake",
             "Refresh",
@@ -239,6 +244,20 @@ class HadesModUI(tk.Tk):
         match = re.match(r"^Enable all (.+) boon edits$", text)
         if match:
             return f"启用 {match.group(1)} 的全部祝福编辑"
+        arcana_translations = {
+            "Arcana": "阿卡纳",
+            "Arcana Globals": "阿卡纳全局",
+            "Arcana Card Effect Multipliers": "阿卡纳卡牌效果倍率",
+            "Unlock+Upgrade Cost Multiplier": "解锁+升级花费倍率",
+            "Starting Grasp Limit": "起始抓握上限",
+            "Grasp Growth Multiplier": "抓握成长倍率",
+            (
+                "Configure Arcana card effects, unlock/upgrade costs, and Grasp growth. "
+                "Per-card multipliers scale Arcana trait rarity multipliers."
+            ): "配置阿卡纳卡牌效果、解锁/升级花费和抓握成长。每张卡牌倍率会缩放对应阿卡纳特质的稀有度倍率。",
+        }
+        if text in arcana_translations:
+            return arcana_translations[text]
         return STATIC_TEXT_TRANSLATIONS.get(text, text)
 
     def _register_text(self, widget: tk.Misc, text: str) -> None:
@@ -250,6 +269,8 @@ class HadesModUI(tk.Tk):
     def _translate_operation_message(self, message: str) -> str:
         if self.language == "en":
             return message
+        if message == "Enable Arcana patch before generating copies.":
+            return "请先启用阿卡纳补丁后再生成副本。"
         if message in EXACT_ERROR_TRANSLATIONS:
             return EXACT_ERROR_TRANSLATIONS[message]
         if message.startswith("Missing files to back up:\n"):
@@ -409,6 +430,7 @@ class HadesModUI(tk.Tk):
         self.rarity_frame = ttk.Frame(self.notebook, padding=12)
         self.boon_multiplier_frame = ttk.Frame(self.notebook, padding=12)
         self.weapon_damage_frame = ttk.Frame(self.notebook, padding=12)
+        self.arcana_frame = ttk.Frame(self.notebook, padding=12)
         self.reward_frame = ttk.Frame(self.notebook, padding=12)
         self.keepsake_frame = ttk.Frame(self.notebook, padding=12)
         self.refresh_frame = ttk.Frame(self.notebook, padding=12)
@@ -416,14 +438,16 @@ class HadesModUI(tk.Tk):
         self.notebook.add(self.rarity_frame, text=self.notebook_tab_labels[1])
         self.notebook.add(self.boon_multiplier_frame, text=self.notebook_tab_labels[2])
         self.notebook.add(self.weapon_damage_frame, text=self.notebook_tab_labels[3])
-        self.notebook.add(self.reward_frame, text=self.notebook_tab_labels[4])
-        self.notebook.add(self.keepsake_frame, text=self.notebook_tab_labels[5])
-        self.notebook.add(self.refresh_frame, text=self.notebook_tab_labels[6])
+        self.notebook.add(self.arcana_frame, text=self.notebook_tab_labels[4])
+        self.notebook.add(self.reward_frame, text=self.notebook_tab_labels[5])
+        self.notebook.add(self.keepsake_frame, text=self.notebook_tab_labels[6])
+        self.notebook.add(self.refresh_frame, text=self.notebook_tab_labels[7])
 
         self._build_initial_stats_tab()
         self._build_rarity_tab()
         self._build_boon_multiplier_tab()
         self._build_weapon_damage_tab()
+        self._build_arcana_tab()
         self._build_reward_tab()
         self._build_keepsake_tab()
         self._build_refresh_tab()
@@ -751,6 +775,69 @@ class HadesModUI(tk.Tk):
                 "value": value_var,
             }
 
+    def _build_arcana_tab(self) -> None:
+        scrollable = self._create_scrollable_tab(self.arcana_frame)
+        scrollable.columnconfigure(0, weight=1)
+
+        ttk.Label(
+            scrollable,
+            text=(
+                "Configure Arcana card effects, unlock/upgrade costs, and Grasp growth. "
+                "Per-card multipliers scale Arcana trait rarity multipliers."
+            ),
+            wraplength=850,
+            justify="left",
+        ).grid(row=0, column=0, sticky="w")
+
+        global_frame = ttk.LabelFrame(scrollable, text="Arcana Globals", padding=12)
+        global_frame.grid(row=1, column=0, sticky="ew", pady=(8, 8))
+        global_frame.columnconfigure(1, weight=1)
+
+        enabled_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(global_frame, text="Enable patch", variable=enabled_var).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 8)
+        )
+        enabled_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+        unlock_upgrade_cost_multiplier_var = tk.StringVar(value="1.0")
+        ttk.Label(global_frame, text="Unlock+Upgrade Cost Multiplier").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(global_frame, textvariable=unlock_upgrade_cost_multiplier_var).grid(
+            row=1, column=1, sticky="ew", pady=2
+        )
+        unlock_upgrade_cost_multiplier_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+        starting_grasp_limit_var = tk.StringVar(value="10")
+        ttk.Label(global_frame, text="Starting Grasp Limit").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Entry(global_frame, textvariable=starting_grasp_limit_var).grid(row=2, column=1, sticky="ew", pady=2)
+        starting_grasp_limit_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+        grasp_growth_multiplier_var = tk.StringVar(value="1.0")
+        ttk.Label(global_frame, text="Grasp Growth Multiplier").grid(row=3, column=0, sticky="w", pady=2)
+        ttk.Entry(global_frame, textvariable=grasp_growth_multiplier_var).grid(row=3, column=1, sticky="ew", pady=2)
+        grasp_growth_multiplier_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+        card_frame = ttk.LabelFrame(scrollable, text="Arcana Card Effect Multipliers", padding=12)
+        card_frame.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        card_frame.columnconfigure(1, weight=1)
+
+        effect_multiplier_vars: dict[str, tk.StringVar] = {}
+        for idx, card_name in enumerate(ARCANA_CARD_ORDER):
+            ttk.Label(card_frame, text=f"{card_name} Effect Multiplier").grid(
+                row=idx, column=0, sticky="w", pady=2
+            )
+            field_var = tk.StringVar(value="1.0")
+            ttk.Entry(card_frame, textvariable=field_var).grid(row=idx, column=1, sticky="ew", pady=2)
+            field_var.trace_add("write", lambda *_args: self._refresh_preview())
+            effect_multiplier_vars[card_name] = field_var
+
+        self.arcana_editor_vars = {
+            "enabled": enabled_var,
+            "unlock_upgrade_cost_multiplier": unlock_upgrade_cost_multiplier_var,
+            "starting_grasp_limit": starting_grasp_limit_var,
+            "grasp_growth_multiplier": grasp_growth_multiplier_var,
+            "effect_multipliers": effect_multiplier_vars,
+        }
+
     def _build_reward_tab(self) -> None:
         scrollable = self._create_scrollable_tab(self.reward_frame)
         scrollable.columnconfigure(0, weight=1)
@@ -1037,6 +1124,24 @@ class HadesModUI(tk.Tk):
             vars_for_weapon["enabled"].set(bool(source_state["enabled"]))
             vars_for_weapon["value"].set(source_state["value"])
 
+        arcana_state = self.state["profiles"].get(
+            self.arcana_profile_key,
+            self.service.default_arcana_editor_state(),
+        )
+        self.arcana_editor_vars["enabled"].set(bool(arcana_state.get("enabled", False)))
+        self.arcana_editor_vars["unlock_upgrade_cost_multiplier"].set(
+            str(arcana_state.get("unlock_upgrade_cost_multiplier", "1.0"))
+        )
+        self.arcana_editor_vars["starting_grasp_limit"].set(
+            str(arcana_state.get("starting_grasp_limit", "10"))
+        )
+        self.arcana_editor_vars["grasp_growth_multiplier"].set(
+            str(arcana_state.get("grasp_growth_multiplier", "1.0"))
+        )
+        effect_multipliers = arcana_state.get("effect_multipliers", {})
+        for card_name, card_var in self.arcana_editor_vars["effect_multipliers"].items():
+            card_var.set(str(effect_multipliers.get(card_name, "1.0")))
+
         reward_editor_state = self.state["profiles"][self.reward_profile_key]
         for reward_name, vars_for_reward in self.reward_editor_vars.items():
             source_state = reward_editor_state[reward_name]
@@ -1150,6 +1255,20 @@ class HadesModUI(tk.Tk):
             collected["gods"][god_key] = god_state
         return collected
 
+    def _collect_arcana_editor_state(self) -> dict[str, Any]:
+        effect_multipliers: dict[str, str] = {}
+        for card_name, card_var in self.arcana_editor_vars["effect_multipliers"].items():
+            effect_multipliers[card_name] = card_var.get().strip()
+        return {
+            "enabled": bool(self.arcana_editor_vars["enabled"].get()),
+            "effect_multipliers": effect_multipliers,
+            "unlock_upgrade_cost_multiplier": self.arcana_editor_vars[
+                "unlock_upgrade_cost_multiplier"
+            ].get().strip(),
+            "starting_grasp_limit": self.arcana_editor_vars["starting_grasp_limit"].get().strip(),
+            "grasp_growth_multiplier": self.arcana_editor_vars["grasp_growth_multiplier"].get().strip(),
+        }
+
     def _collect_profile_state(self, profile: str) -> dict[str, Any]:
         if profile == self.initial_stats_profile_key:
             return self._collect_initial_stats_state()
@@ -1159,6 +1278,8 @@ class HadesModUI(tk.Tk):
             return self._collect_boon_multiplier_state()
         if profile == self.weapon_damage_profile_key:
             return self._collect_weapon_damage_state()
+        if profile == self.arcana_profile_key:
+            return self._collect_arcana_editor_state()
         if profile == self.reward_profile_key:
             return self._collect_reward_editor_state()
         if profile == self.keepsake_profile_key:
@@ -1193,6 +1314,7 @@ class HadesModUI(tk.Tk):
         self.state["profiles"]["rarity_editor"] = self._collect_rarity_editor_state()
         self.state["profiles"][self.boon_multiplier_profile_key] = self._collect_boon_multiplier_state()
         self.state["profiles"]["weapon_damage"] = self._collect_weapon_damage_state()
+        self.state["profiles"][self.arcana_profile_key] = self._collect_arcana_editor_state()
         self.state["profiles"][self.reward_profile_key] = self._collect_reward_editor_state()
         self.state["profiles"][self.keepsake_profile_key] = self._collect_keepsake_editor_state()
         self.state["profiles"][self.refresh_profile_key] = self._collect_refresh_state()

@@ -120,6 +120,73 @@ DEFAULT_WEAPON_DAMAGE_STATE: dict[str, dict[str, Any]] = {
     for weapon_name in WEAPON_DAMAGE_WEAPONS
 }
 
+ARCANA_CARD_ORDER: tuple[str, ...] = (
+    "ChanneledCast",
+    "HealthRegen",
+    "LowManaDamageBonus",
+    "CastCount",
+    "SorceryRegenUpgrade",
+    "CastBuff",
+    "BonusHealth",
+    "BonusDodge",
+    "ManaOverTime",
+    "MagicCrit",
+    "SprintShield",
+    "LastStand",
+    "MaxHealthPerRoom",
+    "StatusVulnerability",
+    "ChanneledBlock",
+    "DoorReroll",
+    "StartingGold",
+    "MetaToRunUpgrade",
+    "RarityBoost",
+    "BonusRarity",
+    "TradeOff",
+    "ScreenReroll",
+    "LowHealthBonus",
+    "EpicRarityBoost",
+    "CardDraw",
+)
+
+ARCANA_CARD_TO_TRAIT: dict[str, str] = {
+    "ChanneledCast": "ChannelSlowMetaUpgrade",
+    "HealthRegen": "DoorHealMetaUpgrade",
+    "LowManaDamageBonus": "LowManaDamageMetaupgrade",
+    "CastCount": "CastDamageMetaUpgrade",
+    "SorceryRegenUpgrade": "SorceryRegenMetaUpgrade",
+    "CastBuff": "InsideCastBuffMetaUpgrade",
+    "BonusHealth": "HealthManaBonusMetaUpgrade",
+    "BonusDodge": "DodgeBonusMetaUpgrade",
+    "ManaOverTime": "ManaOverTimeMetaUpgrade",
+    "MagicCrit": "MagicCritMetaUpgrade",
+    "SprintShield": "SprintShieldMetaUpgrade",
+    "LastStand": "LastStandSlowTimeMetaUpgrade",
+    "MaxHealthPerRoom": "ChamberHealthMetaUpgrade",
+    "StatusVulnerability": "EffectVulnerabilityMetaUpgrade",
+    "ChanneledBlock": "BossShieldMetaUpgrade",
+    "DoorReroll": "DoorRerollMetaUpgrade",
+    "StartingGold": "StartingGoldMetaUpgrade",
+    "MetaToRunUpgrade": "MetaToRunMetaUpgrade",
+    "RarityBoost": "RarityBoostMetaUpgrade",
+    "BonusRarity": "DuoRarityBoostMetaUpgrade",
+    "TradeOff": "RerollTradeOffMetaUpgrade",
+    "ScreenReroll": "PanelRerollMetaUpgrade",
+    "LowHealthBonus": "LowHealthBuffMetaUpgrade",
+    "EpicRarityBoost": "EpicRarityBoostMetaUpgrade",
+    "CardDraw": "BossProgressionMetaUpgrade",
+}
+
+DEFAULT_ARCANA_EDITOR_STATE: dict[str, Any] = {
+    "enabled": False,
+    "effect_multipliers": {
+        card_name: "1.0"
+        for card_name in ARCANA_CARD_ORDER
+    },
+    "unlock_upgrade_cost_multiplier": "1.0",
+    "starting_grasp_limit": "10",
+    "grasp_growth_multiplier": "1.0",
+}
+
 REFRESH_FEATURE_ORDER: tuple[tuple[str, str], ...] = (
     ("hammer_refreshable", "Daedalus Hammer Refreshable"),
     ("npc_boon_refreshable", "NPC Boon Refreshable"),
@@ -1746,6 +1813,7 @@ DEFAULT_STATE: dict[str, Any] = {
         "refresh": DEFAULT_REFRESH_STATE,
         "reward_editor": DEFAULT_REWARD_EDITOR_STATE,
         "weapon_damage": DEFAULT_WEAPON_DAMAGE_STATE,
+        "arcana_editor": DEFAULT_ARCANA_EDITOR_STATE,
         "keepsake_editor": DEFAULT_KEEPSAKE_EDITOR_STATE,
         "boon_multiplier": DEFAULT_BOON_MULTIPLIER_STATE,
     },

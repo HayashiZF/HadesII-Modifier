@@ -10,6 +10,8 @@ import tempfile
 from typing import Any, Callable
 
 from .patches import (
+    apply_arcana_meta_upgrade_data_profile,
+    apply_arcana_trait_data_profile,
     apply_initial_stats_hero_data_profile,
     apply_initial_stats_run_logic_profile,
     apply_keepsake_editor_profile,
@@ -34,6 +36,9 @@ from .patches import (
 )
 from .paths import AppPaths
 from .state import (
+    ARCANA_CARD_ORDER,
+    ARCANA_CARD_TO_TRAIT,
+    DEFAULT_ARCANA_EDITOR_STATE,
     BOON_MULTIPLIER_GOD_FILE_MAP,
     BOON_MULTIPLIER_GOD_SOURCES,
     DEFAULT_BOON_MULTIPLIER_STATE,
@@ -66,6 +71,9 @@ class ModService:
 
     def default_weapon_damage_state(self) -> dict[str, Any]:
         return copy.deepcopy(DEFAULT_WEAPON_DAMAGE_STATE)
+
+    def default_arcana_editor_state(self) -> dict[str, Any]:
+        return copy.deepcopy(DEFAULT_ARCANA_EDITOR_STATE)
 
     def default_reward_editor_state(self) -> dict[str, Any]:
         return copy.deepcopy(DEFAULT_REWARD_EDITOR_STATE)
@@ -212,6 +220,10 @@ class ModService:
             if any(bool(weapon_state.get("enabled")) for weapon_state in profile_state.values()):
                 return ["TraitData.lua"]
             return []
+        if profile == "arcana_editor":
+            if bool(profile_state.get("enabled")):
+                return ["MetaUpgradeData.lua", "TraitData_MetaUpgrade.lua"]
+            return []
         if profile == "refresh":
             targets: list[str] = []
             if bool(profile_state.get("hammer_refreshable", {}).get("enabled")):
@@ -273,6 +285,8 @@ class ModService:
                 )
             if profile == "weapon_damage":
                 raise OperationError("Enable at least one weapon damage patch before generating copies.")
+            if profile == "arcana_editor":
+                raise OperationError("Enable Arcana patch before generating copies.")
             if profile == "reward_editor":
                 raise OperationError("Enable at least one reward amount patch before generating copies.")
             if profile == "keepsake_editor":
@@ -397,6 +411,20 @@ class ModService:
             validated_state = self._validate_weapon_damage_state(profile_state)
             return {
                 "TraitData.lua": lambda text: apply_weapon_damage_profile(text, validated_state),
+            }
+        if profile == "arcana_editor":
+            validated_state = self._validate_arcana_editor_state(profile_state)
+            return {
+                "MetaUpgradeData.lua": lambda text: apply_arcana_meta_upgrade_data_profile(
+                    text,
+                    validated_state,
+                    ARCANA_CARD_TO_TRAIT,
+                ),
+                "TraitData_MetaUpgrade.lua": lambda text: apply_arcana_trait_data_profile(
+                    text,
+                    validated_state,
+                    ARCANA_CARD_TO_TRAIT,
+                ),
             }
         if profile == "reward_editor":
             validated_state = self._validate_reward_editor_state(profile_state)
@@ -532,6 +560,35 @@ class ModService:
                 str(source_state.get("value", "")).strip(),
                 f"{weapon_name}.value",
             )
+        return validated
+
+    def _validate_arcana_editor_state(self, arcana_editor_state: dict[str, Any]) -> dict[str, Any]:
+        validated = copy.deepcopy(arcana_editor_state)
+        validated["enabled"] = bool(validated.get("enabled"))
+        validated["unlock_upgrade_cost_multiplier"] = validate_positive_number_string(
+            str(validated.get("unlock_upgrade_cost_multiplier", "")).strip(),
+            "arcana_editor.unlock_upgrade_cost_multiplier",
+        )
+        validated["grasp_growth_multiplier"] = validate_positive_number_string(
+            str(validated.get("grasp_growth_multiplier", "")).strip(),
+            "arcana_editor.grasp_growth_multiplier",
+        )
+        validated["starting_grasp_limit"] = validate_whole_number_string(
+            str(validated.get("starting_grasp_limit", "")).strip(),
+            "arcana_editor.starting_grasp_limit",
+        )
+        effect_multipliers = validated.get("effect_multipliers", {})
+        if not isinstance(effect_multipliers, dict):
+            raise OperationError("arcana_editor.effect_multipliers must be a mapping.")
+        normalized_multipliers: dict[str, str] = {}
+        for card_name in ARCANA_CARD_ORDER:
+            if card_name not in effect_multipliers:
+                raise OperationError(f"Missing arcana effect multiplier for {card_name}.")
+            normalized_multipliers[card_name] = validate_positive_number_string(
+                str(effect_multipliers.get(card_name, "")).strip(),
+                f"arcana_editor.effect_multipliers.{card_name}",
+            )
+        validated["effect_multipliers"] = normalized_multipliers
         return validated
 
     def _validate_reward_editor_state(self, reward_editor_state: dict[str, Any]) -> dict[str, Any]:
