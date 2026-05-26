@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+from .profiles import (
+    calculate_lua_brace_depth_before_index,
+    count_multiline_section_headers,
+    detect_newline,
+    find_matching_brace,
+    find_section_bounds,
+    replace_field_by_path,
+    replace_field_in_named_profile_section,
+    replace_field_in_named_section,
+    replace_function_return_value,
+    replace_inline_table_member,
+    replace_pickaxe_max_health_by_resource,
+    replace_resource_cost_money_in_named_section,
+    replace_scalar_field_in_named_section,
+    replace_table_in_section,
+    replace_unique_inline_array,
+    replace_unique_multiline_table,
+    replace_unique_scalar_field,
+)
+
+__all__ = [
+    "calculate_lua_brace_depth_before_index",
+    "count_multiline_section_headers",
+    "detect_newline",
+    "find_matching_brace",
+    "find_section_bounds",
+    "replace_field_by_path",
+    "replace_field_in_named_profile_section",
+    "replace_field_in_named_section",
+    "replace_function_return_value",
+    "replace_inline_table_member",
+    "replace_pickaxe_max_health_by_resource",
+    "replace_resource_cost_money_in_named_section",
+    "replace_scalar_field_in_named_section",
+    "replace_table_in_section",
+    "replace_unique_inline_array",
+    "replace_unique_multiline_table",
+    "replace_unique_scalar_field",
+]

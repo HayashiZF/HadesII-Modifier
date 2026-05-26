@@ -33,7 +33,25 @@ The repository now contains a Windows desktop helper executable workflow:
 - Runtime files:
   - generated copies: `.hades2_mod/generated/Content/Scripts/*.lua`
   - original backups: `.hades2_mod/originals/Content/Scripts/*.lua`
-  - app state: `.hades2_mod/state.json`
+- app state: `.hades2_mod/state.json`
+
+Current Python structure (post split, compatibility-first):
+
+- Compatibility facades (stable imports):
+  - `src/hades_mod_ui/app.py` -> re-exports `HadesModUI`, `run_app`
+  - `src/hades_mod_ui/operations.py` -> re-exports `ModService`, `OperationError`
+  - `src/hades_mod_ui/state.py` -> re-exports state constants/defaults/store
+  - `src/hades_mod_ui/patches.py` -> re-exports patch functions/constants
+- Main implementations:
+  - `src/hades_mod_ui/ui/main_window.py`: primary Tk UI class implementation
+  - `src/hades_mod_ui/operations_support/mod_service.py`: patch orchestration, validation, file workflow
+  - `src/hades_mod_ui/state/`: state defaults/catalogs/store split
+  - `src/hades_mod_ui/patches/`: validators/lua-ops/profile patching split
+- Transitional legacy snapshots:
+  - `src/hades_mod_ui/state_legacy.py`
+  - `src/hades_mod_ui/patches_legacy.py`
+- Test suite:
+  - `tests/` (pytest-based lightweight regression and workflow coverage)
 
 Important behavior constraints for this tool:
 
@@ -56,9 +74,12 @@ Important behavior constraints for this tool:
 - `EnemyData*.lua` and `EnemyAILogic.lua`: enemy archetypes and AI behavior.
 - `UILogic.lua`, `HUDData.lua`, `UIData.lua`, `*ScreenData.lua`: UI and HUD flow.
 - `Debug.lua`: useful engine-facing hooks and debug helpers.
-- `src/hades_mod_ui/app.py`: desktop UI layout and interaction handlers.
-- `src/hades_mod_ui/operations.py`: backup/apply/restore and generation service.
-- `src/hades_mod_ui/patches.py`: deterministic Lua text transforms and anchors.
+- `src/hades_mod_ui/ui/main_window.py`: desktop UI layout and interaction handlers.
+- `src/hades_mod_ui/operations_support/mod_service.py`: backup/apply/restore and generation service.
+- `src/hades_mod_ui/patches/profiles.py`: deterministic Lua text transforms and anchors.
+- `src/hades_mod_ui/patches/validators.py`: user-input numeric/range validation for patch payloads.
+- `src/hades_mod_ui/patches/lua_ops.py`: low-level Lua text replacement/search helpers.
+- `src/hades_mod_ui/state/store.py`: JSON state persistence and deep-merge behavior.
 - `src/hades_mod_ui/paths.py`: root/workspace path resolution and workspace naming.
 
 ## Common navigation commands
@@ -66,11 +87,23 @@ Important behavior constraints for this tool:
 ### Repository inspection
 
 - `Get-ChildItem *.lua`
+- `Get-ChildItem src/hades_mod_ui -Recurse -File`
 - `rg '^Import "' RunData.lua RoomLogic.lua UtilityLogic.lua`
 - `rg 'InheritFrom|DeepInheritance' *.lua`
 - `rg 'CurrentRun|GameState|MapState|SessionMapState' *.lua`
 - `rg 'CallFunctionName\\(|GetHeroTraitValues\\(' *.lua`
 - `rg 'OnKeyPressed\\{|OnAnyLoad|OnPreThingCreation' *.lua`
+
+### Desktop tool inspection
+
+- UI callbacks and tab builders:
+  `rg '^    def _build_|^    def _on_|^    def _collect_' src/hades_mod_ui/ui/main_window.py`
+- Operation validation and generators:
+  `rg '^    def _validate_|^    def _build_|^    def generate_|^    def apply_|^    def backup_|^    def restore_' src/hades_mod_ui/operations_support/mod_service.py`
+- Patch entry points:
+  `rg '^def apply_|^def replace_|^def find_|^def validate_' src/hades_mod_ui/patches/profiles.py src/hades_mod_ui/patches/lua_ops.py src/hades_mod_ui/patches/validators.py`
+- State constants/defaults/store boundaries:
+  `rg '^DEFAULT_|^class StateStore|^BOON_|^REWARD_|^KEEPSAKE_' src/hades_mod_ui/state/*.py`
 
 ### Common modding searches
 
@@ -433,5 +466,14 @@ Do not assume each boon has an independent standalone rarity probability field.
 - Be careful with dirty worktrees or user changes; do not revert unrelated edits.
 - When a feature touches persistence, inspect `RunLogic.lua`, `SaveLogic.lua`, and `PatchLogic.lua` together.
 - For modding requests, first classify the change as trait, enemy, encounter, effect, UI, or save/progression work, then start in the matching data file.
-- For desktop-tool requests, classify first as UI (`app.py`), patch logic (`patches.py`), or file workflow (`operations.py`) before editing.
+- For desktop-tool requests, classify first as UI (`ui/main_window.py`), patch logic (`patches/*`), or file workflow (`operations_support/mod_service.py`) before editing.
 - Keep references current with the live workspace folder name `.hades2_mod` (legacy `.hades2_mod_ui` may only appear in migration logic).
+
+## Python refactor guardrails
+
+- Preserve facade imports (`hades_mod_ui.app`, `hades_mod_ui.operations`, `hades_mod_ui.state`, `hades_mod_ui.patches`) unless intentionally doing a breaking change.
+- Prefer placing new logic in split packages first (`ui/`, `operations_support/`, `state/`, `patches/`) rather than growing facade files.
+- Treat `state_legacy.py` and `patches_legacy.py` as transitional references; avoid adding new behavior there.
+- For behavior-preserving refactors, run:
+  - `python -m pytest -q`
+  - optional compile sanity: `python -m compileall src`

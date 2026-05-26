@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from .operations_support import ModService, OperationError
+from .mod_service import ModService, OperationError
 
 __all__ = ["ModService", "OperationError"]
