@@ -59,9 +59,9 @@ STATIC_TEXT_TRANSLATIONS: dict[str, str] = {
     "Click a tab below to switch modes.": "点击下方标签页以切换模式。",
     "Initial Stats": "初始属性",
     "Rarity": "稀有度",
-    "Boon Multipliers": "祝福倍率",
-    "Weapon Damage": "武器伤害",
-    "Reward Amounts": "奖励数值",
+    "Boon": "祝福",
+    "Weapon": "武器",
+    "Reward": "奖励",
     "Keepsake": "信物",
     "Refresh": "刷新",
     "Actions": "操作",
@@ -87,11 +87,15 @@ STATIC_TEXT_TRANSLATIONS: dict[str, str] = {
     "Show advanced stack fields": "显示高级层数字段",
     "Read-only: SourceIsMultiplier is detected and not editable.": "只读: 检测到 SourceIsMultiplier，无法编辑。",
     (
-        "Generate a patched TraitData.lua that adds a flat base-damage bonus to one or more "
-        "primary weapon families through the DummyWeapon* trait entries."
-    ): "生成修改后的 TraitData.lua，通过 DummyWeapon* 词条为一个或多个主武器系列增加固定基础伤害。",
-    "Each enabled weapon family applies a flat bonus across its linked attacks.": "每个启用的武器系列都会对其关联攻击应用固定加成。",
+        "Generate a patched TraitData.lua with per-weapon controls for flat/percent damage, "
+        "range multiplier, and attack-interval multiplier through DummyWeapon* trait entries."
+    ): "生成修改后的 TraitData.lua，通过 DummyWeapon* 词条按武器配置固定/倍率伤害、范围倍率和攻击间隔倍率。",
+    "Interval multiplier below 1.0 attacks faster (e.g. 0.80 = 20% shorter interval).": "间隔倍率小于 1.0 表示更快攻击（例如 0.80 = 间隔缩短 20%）。",
     "Flat damage bonus": "固定伤害加成",
+    "Enable flat bonus": "启用固定加成",
+    "Enable damage multiplier": "启用伤害倍率",
+    "Enable range multiplier": "启用范围倍率",
+    "Enable interval multiplier": "启用间隔倍率",
     (
         "Edit the global post-combat room-clear payout values in ConsumableData.lua. "
         "Primary fields change the real pickup reward. Advanced metadata is optional and hidden by default."
@@ -119,7 +123,7 @@ STATIC_TEXT_TRANSLATIONS: dict[str, str] = {
 EXACT_ERROR_TRANSLATIONS: dict[str, str] = {
     "Enable Initial Stats patch before generating copies.": "请先启用初始属性补丁后再生成副本。",
     "Enable at least one god and one boon in Boon Multipliers before generating copies.": "请先在祝福倍率中至少启用一个神祇和一个祝福后再生成副本。",
-    "Enable at least one weapon damage patch before generating copies.": "请先启用至少一个武器伤害补丁后再生成副本。",
+    "Enable at least one weapon damage patch before generating copies.": "请先启用至少一个伤害补丁后再生成副本。",
     "Enable at least one reward amount patch before generating copies.": "请先启用至少一个奖励数值补丁后再生成副本。",
     "Enable at least one keepsake patch before generating copies.": "请先启用至少一个信物补丁后再生成副本。",
     "Enable at least one refresh patch before generating copies.": "请先启用至少一个刷新补丁后再生成副本。",
@@ -166,6 +170,7 @@ class HadesModUI(tk.Tk):
             self.state,
             self.boon_multiplier_metadata,
         )
+        self.state = self.service.normalize_weapon_damage_state(self.state)
         self.language = self._normalize_language(self.state.get("ui_language"))
         self.state["ui_language"] = self.language
 
@@ -211,10 +216,10 @@ class HadesModUI(tk.Tk):
         self.notebook_tab_labels = (
             "Initial Stats",
             "Rarity",
-            "Boon Multipliers",
-            "Weapon Damage",
+            "Boon",
+            "Weapon",
             "Arcana",
-            "Reward Amounts",
+            "Reward",
             "Keepsake",
             "Refresh",
         )
@@ -738,8 +743,8 @@ class HadesModUI(tk.Tk):
         ttk.Label(
             scrollable,
             text=(
-                "Generate a patched TraitData.lua that adds a flat base-damage bonus to one or more "
-                "primary weapon families through the DummyWeapon* trait entries."
+                "Generate a patched TraitData.lua with per-weapon controls for flat/percent damage, "
+                "range multiplier, and attack-interval multiplier through DummyWeapon* trait entries."
             ),
             wraplength=850,
             justify="left",
@@ -747,7 +752,7 @@ class HadesModUI(tk.Tk):
 
         ttk.Label(
             scrollable,
-            text="Each enabled weapon family applies a flat bonus across its linked attacks.",
+            text="Interval multiplier below 1.0 attacks faster (e.g. 0.80 = 20% shorter interval).",
             foreground="#0b5cad",
             font=("Segoe UI", 10, "bold"),
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 12))
@@ -759,20 +764,51 @@ class HadesModUI(tk.Tk):
             frame.grid(row=row, column=column, sticky="nsew", padx=(0, 8) if column == 0 else 0, pady=(0, 8))
             frame.columnconfigure(1, weight=1)
 
-            enabled_var = tk.BooleanVar(value=False)
-            enabled_check = ttk.Checkbutton(frame, text="Enable patch", variable=enabled_var)
-            enabled_check.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
-            enabled_var.trace_add("write", lambda *_args: self._refresh_preview())
+            flat_enabled_var = tk.BooleanVar(value=False)
+            ttk.Checkbutton(frame, text="Enable flat bonus", variable=flat_enabled_var).grid(
+                row=0, column=0, sticky="w", pady=2
+            )
+            flat_enabled_var.trace_add("write", lambda *_args: self._refresh_preview())
+            flat_value_var = tk.StringVar(value="5")
+            ttk.Entry(frame, textvariable=flat_value_var).grid(row=0, column=1, sticky="ew", pady=2)
+            flat_value_var.trace_add("write", lambda *_args: self._refresh_preview())
 
-            ttk.Label(frame, text="Flat damage bonus").grid(row=1, column=0, sticky="w", pady=2)
-            value_var = tk.StringVar(value="0")
-            entry = ttk.Entry(frame, textvariable=value_var)
-            entry.grid(row=1, column=1, sticky="ew", pady=2)
-            value_var.trace_add("write", lambda *_args: self._refresh_preview())
+            mult_enabled_var = tk.BooleanVar(value=False)
+            ttk.Checkbutton(frame, text="Enable damage multiplier", variable=mult_enabled_var).grid(
+                row=1, column=0, sticky="w", pady=2
+            )
+            mult_enabled_var.trace_add("write", lambda *_args: self._refresh_preview())
+            mult_value_var = tk.StringVar(value="1.05")
+            ttk.Entry(frame, textvariable=mult_value_var).grid(row=1, column=1, sticky="ew", pady=2)
+            mult_value_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+            range_enabled_var = tk.BooleanVar(value=False)
+            ttk.Checkbutton(frame, text="Enable range multiplier", variable=range_enabled_var).grid(
+                row=2, column=0, sticky="w", pady=2
+            )
+            range_enabled_var.trace_add("write", lambda *_args: self._refresh_preview())
+            range_value_var = tk.StringVar(value="1.30")
+            ttk.Entry(frame, textvariable=range_value_var).grid(row=2, column=1, sticky="ew", pady=2)
+            range_value_var.trace_add("write", lambda *_args: self._refresh_preview())
+
+            interval_enabled_var = tk.BooleanVar(value=False)
+            ttk.Checkbutton(frame, text="Enable interval multiplier", variable=interval_enabled_var).grid(
+                row=3, column=0, sticky="w", pady=2
+            )
+            interval_enabled_var.trace_add("write", lambda *_args: self._refresh_preview())
+            interval_value_var = tk.StringVar(value="0.80")
+            ttk.Entry(frame, textvariable=interval_value_var).grid(row=3, column=1, sticky="ew", pady=2)
+            interval_value_var.trace_add("write", lambda *_args: self._refresh_preview())
 
             self.weapon_damage_vars[weapon_name] = {
-                "enabled": enabled_var,
-                "value": value_var,
+                "flat_enabled": flat_enabled_var,
+                "flat_value": flat_value_var,
+                "multiplier_enabled": mult_enabled_var,
+                "multiplier_value": mult_value_var,
+                "range_enabled": range_enabled_var,
+                "range_multiplier": range_value_var,
+                "interval_enabled": interval_enabled_var,
+                "interval_multiplier": interval_value_var,
             }
 
     def _build_arcana_tab(self) -> None:
@@ -1121,8 +1157,14 @@ class HadesModUI(tk.Tk):
         weapon_damage_state = self.state["profiles"]["weapon_damage"]
         for weapon_name, vars_for_weapon in self.weapon_damage_vars.items():
             source_state = weapon_damage_state[weapon_name]
-            vars_for_weapon["enabled"].set(bool(source_state["enabled"]))
-            vars_for_weapon["value"].set(source_state["value"])
+            vars_for_weapon["flat_enabled"].set(bool(source_state["flat_enabled"]))
+            vars_for_weapon["flat_value"].set(str(source_state["flat_value"]))
+            vars_for_weapon["multiplier_enabled"].set(bool(source_state["multiplier_enabled"]))
+            vars_for_weapon["multiplier_value"].set(str(source_state["multiplier_value"]))
+            vars_for_weapon["range_enabled"].set(bool(source_state["range_enabled"]))
+            vars_for_weapon["range_multiplier"].set(str(source_state["range_multiplier"]))
+            vars_for_weapon["interval_enabled"].set(bool(source_state["interval_enabled"]))
+            vars_for_weapon["interval_multiplier"].set(str(source_state["interval_multiplier"]))
 
         arcana_state = self.state["profiles"].get(
             self.arcana_profile_key,
@@ -1218,8 +1260,14 @@ class HadesModUI(tk.Tk):
         collected: dict[str, Any] = {}
         for weapon_name, vars_for_weapon in self.weapon_damage_vars.items():
             collected[weapon_name] = {
-                "enabled": bool(vars_for_weapon["enabled"].get()),
-                "value": vars_for_weapon["value"].get().strip(),
+                "flat_enabled": bool(vars_for_weapon["flat_enabled"].get()),
+                "flat_value": vars_for_weapon["flat_value"].get().strip(),
+                "multiplier_enabled": bool(vars_for_weapon["multiplier_enabled"].get()),
+                "multiplier_value": vars_for_weapon["multiplier_value"].get().strip(),
+                "range_enabled": bool(vars_for_weapon["range_enabled"].get()),
+                "range_multiplier": vars_for_weapon["range_multiplier"].get().strip(),
+                "interval_enabled": bool(vars_for_weapon["interval_enabled"].get()),
+                "interval_multiplier": vars_for_weapon["interval_multiplier"].get().strip(),
             }
         return collected
 

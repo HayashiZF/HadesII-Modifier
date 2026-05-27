@@ -203,12 +203,27 @@ def apply_weapon_damage_profile(text: str, weapon_damage_state: dict[str, dict[s
     for weapon_name, trait_name in WEAPON_DAMAGE_TRAIT_NAMES.items():
         family = WEAPON_DAMAGE_FAMILY_MAP[weapon_name]
         weapon_state = weapon_damage_state[weapon_name]
+        has_any_enabled = (
+            bool(weapon_state.get("flat_enabled"))
+            or bool(weapon_state.get("multiplier_enabled"))
+            or bool(weapon_state.get("range_enabled"))
+            or bool(weapon_state.get("interval_enabled"))
+        )
         section_text = patch_dummy_weapon_trait(
             section_text,
             trait_name,
             family,
-            bool(weapon_state["enabled"]),
-            str(weapon_state["value"]),
+            has_any_enabled,
+            {
+                "flat_enabled": bool(weapon_state.get("flat_enabled")),
+                "flat_value": str(weapon_state.get("flat_value", "0")),
+                "multiplier_enabled": bool(weapon_state.get("multiplier_enabled")),
+                "multiplier_value": str(weapon_state.get("multiplier_value", "1")),
+                "range_enabled": bool(weapon_state.get("range_enabled")),
+                "range_multiplier": str(weapon_state.get("range_multiplier", "1")),
+                "interval_enabled": bool(weapon_state.get("interval_enabled")),
+                "interval_multiplier": str(weapon_state.get("interval_multiplier", "1")),
+            },
         )
 
     return text[:section_start] + section_text + text[section_end:]
@@ -923,13 +938,13 @@ def patch_dummy_weapon_trait(
     trait_name: str,
     valid_weapons: list[str],
     enabled: bool,
-    base_value: str,
+    weapon_values: dict[str, str | bool],
 ) -> str:
     trait_start, trait_end = find_section_bounds(section_text, trait_name)
     trait_text = section_text[trait_start:trait_end]
     trait_text = remove_weapon_damage_marker_block(trait_text)
     if enabled:
-        trait_text = insert_weapon_damage_block(trait_text, trait_name, valid_weapons, base_value)
+        trait_text = insert_weapon_damage_block(trait_text, trait_name, valid_weapons, weapon_values)
     return section_text[:trait_start] + trait_text + section_text[trait_end:]
 
 
@@ -944,7 +959,7 @@ def insert_weapon_damage_block(
     trait_text: str,
     trait_name: str,
     valid_weapons: list[str],
-    base_value: str,
+    weapon_values: dict[str, str | bool],
 ) -> str:
     header_match = re.search(rf"(?m)^([ \t]*){re.escape(trait_name)}\s*=\s*$", trait_text)
     if not header_match:
@@ -959,15 +974,74 @@ def insert_weapon_damage_block(
 
     newline = detect_newline(trait_text)
     rendered_weapons = ", ".join(f'"{weapon_name}"' for weapon_name in valid_weapons)
-    block_lines = [
-        f"{inner_indent}{WEAPON_DAMAGE_MARKER_START}",
-        f"{inner_indent}AddOutgoingDamageModifiers = ",
-        f"{inner_indent}{{",
-        f"{inner_indent}\tValidWeapons = {{ {rendered_weapons} }},",
-        f"{inner_indent}\tValidBaseDamageAddition = {{ BaseValue = {base_value} }},",
-        f"{inner_indent}}},",
-        f"{inner_indent}{WEAPON_DAMAGE_MARKER_END}",
-    ]
+    block_lines = [f"{inner_indent}{WEAPON_DAMAGE_MARKER_START}"]
+
+    modifier_lines: list[str] = []
+    if bool(weapon_values.get("flat_enabled")):
+        modifier_lines.append(
+            f"{inner_indent}\tValidBaseDamageAddition = {{ BaseValue = {weapon_values['flat_value']} }},"
+        )
+    if bool(weapon_values.get("multiplier_enabled")):
+        modifier_lines.extend(
+            [
+                f"{inner_indent}\tValidWeaponMultiplier = ",
+                f"{inner_indent}\t{{",
+                f"{inner_indent}\t\tBaseValue = {weapon_values['multiplier_value']},",
+                f"{inner_indent}\t\tSourceIsMultiplier = true,",
+                f"{inner_indent}\t}},",
+            ]
+        )
+    if modifier_lines:
+        block_lines.extend(
+            [
+                f"{inner_indent}AddOutgoingDamageModifiers = ",
+                f"{inner_indent}{{",
+                f"{inner_indent}\tValidWeapons = {{ {rendered_weapons} }},",
+                *modifier_lines,
+                f"{inner_indent}}},",
+            ]
+        )
+
+    property_lines: list[str] = []
+    if bool(weapon_values.get("range_enabled")):
+        property_lines.extend(
+            [
+                f"{inner_indent}\t{{",
+                f"{inner_indent}\t\tWeaponNames = {{ {rendered_weapons} }},",
+                f'{inner_indent}\t\tProjectileProperty = "Range",',
+                f"{inner_indent}\t\tChangeValue = {weapon_values['range_multiplier']},",
+                f'{inner_indent}\t\tChangeType = "Multiply",',
+                f"{inner_indent}\t}},",
+                f"{inner_indent}\t{{",
+                f"{inner_indent}\t\tWeaponNames = {{ {rendered_weapons} }},",
+                f'{inner_indent}\t\tWeaponProperty = "AutoLockRange",',
+                f"{inner_indent}\t\tChangeValue = {weapon_values['range_multiplier']},",
+                f'{inner_indent}\t\tChangeType = "Multiply",',
+                f"{inner_indent}\t}},",
+            ]
+        )
+    if bool(weapon_values.get("interval_enabled")):
+        property_lines.extend(
+            [
+                f"{inner_indent}\t{{",
+                f"{inner_indent}\t\tWeaponNames = {{ {rendered_weapons} }},",
+                f'{inner_indent}\t\tWeaponProperty = "Cooldown",',
+                f"{inner_indent}\t\tChangeValue = {weapon_values['interval_multiplier']},",
+                f'{inner_indent}\t\tChangeType = "Multiply",',
+                f"{inner_indent}\t}},",
+            ]
+        )
+    if property_lines:
+        block_lines.extend(
+            [
+                f"{inner_indent}PropertyChanges = ",
+                f"{inner_indent}{{",
+                *property_lines,
+                f"{inner_indent}}},",
+            ]
+        )
+
+    block_lines.append(f"{inner_indent}{WEAPON_DAMAGE_MARKER_END}")
     block = newline.join(block_lines) + newline
     return trait_text[: close_match.start()] + block + trait_text[close_match.start() :]
 

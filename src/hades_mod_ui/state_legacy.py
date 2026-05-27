@@ -114,8 +114,14 @@ WEAPON_DAMAGE_WEAPONS: tuple[str, ...] = (
 
 DEFAULT_WEAPON_DAMAGE_STATE: dict[str, dict[str, Any]] = {
     weapon_name: {
-        "enabled": False,
-        "value": "0",
+        "flat_enabled": False,
+        "flat_value": "5",
+        "multiplier_enabled": False,
+        "multiplier_value": "1.05",
+        "range_enabled": False,
+        "range_multiplier": "1.30",
+        "interval_enabled": False,
+        "interval_multiplier": "0.80",
     }
     for weapon_name in WEAPON_DAMAGE_WEAPONS
 }

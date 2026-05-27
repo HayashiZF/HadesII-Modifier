@@ -477,3 +477,38 @@ Do not assume each boon has an independent standalone rarity probability field.
 - For behavior-preserving refactors, run:
   - `python -m pytest -q`
   - optional compile sanity: `python -m compileall src`
+
+## Quick decision tree (desktop tool)
+
+Use this before editing Python files:
+
+1. Is it a UI rendering, widget layout, tab controls, button wiring, or language label issue?
+   - Start in `src/hades_mod_ui/ui/main_window.py`
+   - If it is mostly static text/translation mapping, also check `src/hades_mod_ui/ui/i18n.py`
+
+2. Is it patch-generation behavior, profile validation, target file selection, backup/apply/restore, or error handling?
+   - Start in `src/hades_mod_ui/operations_support/mod_service.py`
+
+3. Is it a deterministic Lua text transform (replace/anchor/section parsing/marker idempotency)?
+   - High-level profile patch behavior: `src/hades_mod_ui/patches/profiles.py`
+   - Low-level Lua text ops: `src/hades_mod_ui/patches/lua_ops.py`
+   - Input/range validation helpers: `src/hades_mod_ui/patches/validators.py`
+
+4. Is it persisted app state shape/defaults/catalog metadata/deep-merge behavior?
+   - Defaults: `src/hades_mod_ui/state/defaults.py`
+   - Static metadata tables: `src/hades_mod_ui/state/catalogs.py`
+   - Persistence + merge: `src/hades_mod_ui/state/store.py`
+
+5. Is it path/root/workspace resolution?
+   - `src/hades_mod_ui/paths.py`
+
+6. Are you unsure where external callers import from?
+   - Keep imports stable through facades:
+     - `src/hades_mod_ui/app.py`
+     - `src/hades_mod_ui/operations.py`
+     - `src/hades_mod_ui/state.py`
+     - `src/hades_mod_ui/patches.py`
+
+7. Validation pass after edits:
+   - Always: `python -m pytest -q`
+   - Optional syntax sanity: `python -m compileall src`

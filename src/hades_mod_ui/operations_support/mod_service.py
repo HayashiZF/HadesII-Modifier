@@ -197,6 +197,44 @@ class ModService:
         profiles["boon_multiplier"] = {"gods": normalized_gods}
         return state
 
+    def normalize_weapon_damage_state(self, state: dict[str, Any]) -> dict[str, Any]:
+        profiles = state.setdefault("profiles", {})
+        raw_profile = profiles.get("weapon_damage", {})
+        normalized_profile = copy.deepcopy(DEFAULT_WEAPON_DAMAGE_STATE)
+
+        if isinstance(raw_profile, dict):
+            for weapon_name in WEAPON_DAMAGE_FAMILY_MAP:
+                source_weapon_state = raw_profile.get(weapon_name, {})
+                target_weapon_state = normalized_profile[weapon_name]
+                if not isinstance(source_weapon_state, dict):
+                    continue
+
+                if "enabled" in source_weapon_state:
+                    target_weapon_state["flat_enabled"] = bool(source_weapon_state.get("enabled"))
+                if "value" in source_weapon_state:
+                    target_weapon_state["flat_value"] = str(source_weapon_state.get("value", "")).strip()
+
+                for field_name in (
+                    "flat_enabled",
+                    "flat_value",
+                    "multiplier_enabled",
+                    "multiplier_value",
+                    "range_enabled",
+                    "range_multiplier",
+                    "interval_enabled",
+                    "interval_multiplier",
+                ):
+                    if field_name in source_weapon_state:
+                        if field_name.endswith("_enabled"):
+                            target_weapon_state[field_name] = bool(source_weapon_state.get(field_name))
+                        else:
+                            target_weapon_state[field_name] = str(
+                                source_weapon_state.get(field_name, target_weapon_state[field_name])
+                            ).strip()
+
+        profiles["weapon_damage"] = normalized_profile
+        return state
+
     def get_target_files(self, profile: str, profile_state: dict[str, Any]) -> list[str]:
         if profile == "epic_preset":
             return ["TraitLogic.lua"]
@@ -217,7 +255,13 @@ class ModService:
                         targets.append(file_name)
             return sorted(set(targets))
         if profile == "weapon_damage":
-            if any(bool(weapon_state.get("enabled")) for weapon_state in profile_state.values()):
+            if any(
+                bool(weapon_state.get("flat_enabled"))
+                or bool(weapon_state.get("multiplier_enabled"))
+                or bool(weapon_state.get("range_enabled"))
+                or bool(weapon_state.get("interval_enabled"))
+                for weapon_state in profile_state.values()
+            ):
                 return ["TraitData.lua"]
             return []
         if profile == "arcana_editor":
@@ -555,10 +599,25 @@ class ModService:
             if weapon_name not in validated:
                 raise OperationError(f"Missing weapon damage configuration for {weapon_name}.")
             source_state = validated[weapon_name]
-            source_state["enabled"] = bool(source_state.get("enabled"))
-            source_state["value"] = validate_signed_number_string(
-                str(source_state.get("value", "")).strip(),
-                f"{weapon_name}.value",
+            source_state["flat_enabled"] = bool(source_state.get("flat_enabled"))
+            source_state["flat_value"] = validate_signed_number_string(
+                str(source_state.get("flat_value", "")).strip(),
+                f"{weapon_name}.flat_value",
+            )
+            source_state["multiplier_enabled"] = bool(source_state.get("multiplier_enabled"))
+            source_state["multiplier_value"] = validate_positive_number_string(
+                str(source_state.get("multiplier_value", "")).strip(),
+                f"{weapon_name}.multiplier_value",
+            )
+            source_state["range_enabled"] = bool(source_state.get("range_enabled"))
+            source_state["range_multiplier"] = validate_positive_number_string(
+                str(source_state.get("range_multiplier", "")).strip(),
+                f"{weapon_name}.range_multiplier",
+            )
+            source_state["interval_enabled"] = bool(source_state.get("interval_enabled"))
+            source_state["interval_multiplier"] = validate_positive_number_string(
+                str(source_state.get("interval_multiplier", "")).strip(),
+                f"{weapon_name}.interval_multiplier",
             )
         return validated
 
