@@ -156,6 +156,19 @@ def validate_whole_number_string(raw_value: str, label: str) -> str:
     return value
 
 
+def validate_positive_int_list_string(raw_value: str, label: str) -> str:
+    items = [item.strip() for item in raw_value.split(",")]
+    cleaned = [item for item in items if item]
+    if not cleaned:
+        raise PatchError(f"{label} must contain at least one whole number.")
+    for item in cleaned:
+        if not re.fullmatch(r"\d+", item):
+            raise PatchError(f"{label} must contain only whole numbers greater than zero.")
+        if int(item) <= 0:
+            raise PatchError(f"{label} values must be greater than zero.")
+    return ", ".join(cleaned)
+
+
 def parse_roll_order(raw_value: str, label: str) -> list[str]:
     items = [item.strip() for item in raw_value.split(",")]
     cleaned = [item for item in items if item]
@@ -395,6 +408,15 @@ def apply_keepsake_editor_profile(text: str, keepsake_editor_state: dict[str, di
                 continue
             field_value = str(fields[field_id])
             field_path = str(field_meta["path"])
+            if field_path == "ChamberThresholds":
+                updated = upsert_inline_array_in_named_profile_section(
+                    updated,
+                    "TraitSetData.Keepsakes",
+                    keepsake_name,
+                    "ChamberThresholds",
+                    [item.strip() for item in field_value.split(",") if item.strip()],
+                )
+                continue
             updated = replace_field_in_named_profile_section(
                 updated,
                 "TraitSetData.Keepsakes",
@@ -688,6 +710,44 @@ def replace_unique_inline_array(
     return text[: match.start()] + replacement + text[match.end() :]
 
 
+def upsert_inline_array_in_named_profile_section(
+    text: str,
+    parent_section_name: str,
+    profile_name: str,
+    field_name: str,
+    items: list[str],
+) -> str:
+    parent_start, parent_end = find_section_bounds(text, parent_section_name)
+    parent_text = text[parent_start:parent_end]
+    profile_start, profile_end = find_section_bounds(parent_text, profile_name)
+    profile_text = parent_text[profile_start:profile_end]
+    updated_profile = upsert_inline_array_in_section(profile_text, field_name, items)
+    updated_parent = parent_text[:profile_start] + updated_profile + parent_text[profile_end:]
+    return text[:parent_start] + updated_parent + text[parent_end:]
+
+
+def upsert_inline_array_in_section(
+    text: str,
+    field_name: str,
+    items: list[str],
+) -> str:
+    pattern = re.compile(rf"(?m)^([ \t]*){re.escape(field_name)}\s*=\s*\{{.*?\}},\s*$")
+    if pattern.search(text):
+        return replace_unique_inline_array(text, field_name, items)
+
+    header_match = re.search(r"(?m)^([ \t]*)\{\s*$", text)
+    if not header_match:
+        raise PatchError(f"Could not find opening brace to insert '{field_name}'.")
+
+    indent = header_match.group(1)
+    field_indent = indent + "\t"
+    rendered_items = ", ".join(items)
+    newline = detect_newline(text)
+    insertion = f"{field_indent}{field_name} = {{ {rendered_items} }},{newline}"
+    insert_at = header_match.end()
+    return text[:insert_at] + newline + insertion + text[insert_at:]
+
+
 def replace_scalar_field_in_named_section(
     text: str,
     section_name: str,
@@ -979,7 +1039,7 @@ def insert_weapon_damage_block(
     modifier_lines: list[str] = []
     if bool(weapon_values.get("flat_enabled")):
         modifier_lines.append(
-            f"{inner_indent}\tValidBaseDamageAddition = {{ BaseValue = {weapon_values['flat_value']} }},"
+            f"{inner_indent}\tValidBaseDamageAddition = {weapon_values['flat_value']},"
         )
     if bool(weapon_values.get("multiplier_enabled")):
         modifier_lines.extend(

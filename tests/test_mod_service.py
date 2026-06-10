@@ -159,3 +159,13 @@ def test_validate_weapon_damage_state_accepts_signed_flat_and_positive_multiplie
     validated = service._validate_weapon_damage_state(state)
     assert validated["WeaponStaffSwing"]["flat_value"] == "-2.5"
     assert validated["WeaponStaffSwing"]["multiplier_value"] == "1.05"
+
+
+def test_validate_keepsake_editor_state_rejects_zero_thresholds(tmp_path) -> None:
+    paths = _build_paths(tmp_path)
+    service = ModService(paths, StateStore(paths.state_file))
+    state = service.default_keepsake_editor_state()
+    state["BlockDeathKeepsake"]["enabled"] = True
+    state["BlockDeathKeepsake"]["fields"]["keepsake_chamber_thresholds"] = "1, 0"
+    with pytest.raises(PatchError):
+        service._validate_keepsake_editor_state(state)

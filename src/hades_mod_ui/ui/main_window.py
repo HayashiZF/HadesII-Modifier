@@ -109,9 +109,10 @@ STATIC_TEXT_TRANSLATIONS: dict[str, str] = {
     "Show advanced metadata": "显示高级元数据",
     (
         "Configure per-keepsake buffs for TraitData_Keepsake.lua. "
-        "Primary fields are always visible. Optional rarity multipliers and "
-        "secondary values are available through advanced controls."
-    ): "为 TraitData_Keepsake.lua 配置每个信物的增益。主字段始终可见，可选稀有度倍率和次级数值可通过高级选项设置。",
+        "Primary fields are always visible. ChamberThresholds controls level-up pace "
+        "per keepsake (for example 1, 1 means one encounter per rank-up). "
+        "Optional rarity multipliers and secondary values are available through advanced controls."
+    ): "为 TraitData_Keepsake.lua 配置每个信物的增益。主字段始终可见，ChamberThresholds 可按信物控制升级节奏（例如 1, 1 表示每次遭遇升一级）。可选稀有度倍率和次级数值可通过高级选项设置。",
     "Enable only the keepsakes you want to patch before generating copies.": "请仅启用你要修改的信物后再生成副本。",
     "Show advanced fields": "显示高级字段",
     "Generate Copies": "生成副本",
@@ -969,8 +970,9 @@ class HadesModUI(tk.Tk):
             scrollable,
             text=(
                 "Configure per-keepsake buffs for TraitData_Keepsake.lua. "
-                "Primary fields are always visible. Optional rarity multipliers and "
-                "secondary values are available through advanced controls."
+                "Primary fields are always visible. ChamberThresholds controls level-up pace "
+                "per keepsake (for example 1, 1 means one encounter per rank-up). "
+                "Optional rarity multipliers and secondary values are available through advanced controls."
             ),
             wraplength=850,
             justify="left",

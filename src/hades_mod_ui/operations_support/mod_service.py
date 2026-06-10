@@ -29,6 +29,7 @@ from ..patches import (
     replace_unique_inline_array,
     replace_unique_multiline_table,
     validate_number_string,
+    validate_positive_int_list_string,
     validate_probability_string,
     validate_positive_number_string,
     validate_signed_number_string,
@@ -694,6 +695,8 @@ class ModService:
                     fields[field_id] = validate_number_string(raw_value, label)
                 elif input_type == "chance_0_1":
                     fields[field_id] = validate_probability_string(raw_value, label)
+                elif input_type == "positive_int_list":
+                    fields[field_id] = validate_positive_int_list_string(raw_value, label)
                 elif input_type == "positive_multiplier":
                     fields[field_id] = validate_positive_number_string(raw_value, label)
                 else:

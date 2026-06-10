@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import copy
+
 from hades_mod_ui.patches import (
     EPIC_MARKER_START,
     WEAPON_DAMAGE_MARKER_START,
     apply_epic_preset,
     apply_initial_stats_hero_data_profile,
     apply_initial_stats_run_logic_profile,
+    apply_keepsake_editor_profile,
     apply_weapon_damage_profile,
 )
+from hades_mod_ui.state import DEFAULT_KEEPSAKE_EDITOR_STATE
 
 
 def test_apply_epic_preset_is_idempotent() -> None:
@@ -111,7 +115,8 @@ def test_apply_weapon_damage_profile_flat_only() -> None:
     )
     out = apply_weapon_damage_profile(source, _weapon_profile(flat=True))
     assert WEAPON_DAMAGE_MARKER_START in out
-    assert "ValidBaseDamageAddition" in out
+    assert "ValidBaseDamageAddition = 5," in out
+    assert "ValidBaseDamageAddition = { BaseValue = 5 }" not in out
     assert "ValidWeaponMultiplier" not in out
     assert "PropertyChanges" not in out
 
@@ -213,3 +218,29 @@ def test_apply_weapon_damage_profile_combined_and_idempotent() -> None:
     twice = apply_weapon_damage_profile(once, profile)
     assert once == twice
     assert once.count(WEAPON_DAMAGE_MARKER_START) == 1
+
+
+def test_apply_keepsake_editor_profile_inserts_per_keepsake_chamber_thresholds() -> None:
+    source = "\n".join(
+        [
+            "TraitSetData.Keepsakes =",
+            "{",
+            "\tGiftTrait =",
+            "\t{",
+            "\t\tChamberThresholds =  { 25, 50 },",
+            "\t},",
+            "\tBlockDeathKeepsake = ",
+            "\t{",
+            '\t\tInheritFrom = { "GiftTrait" },',
+            "\t\tBlockDeathHealth = { BaseValue = 30, AsInt = true },",
+            "\t\tBlockDeathTimer = 10,",
+            "\t},",
+            "}",
+        ]
+    )
+    profile = copy.deepcopy(DEFAULT_KEEPSAKE_EDITOR_STATE)
+    profile["BlockDeathKeepsake"]["enabled"] = True
+    profile["BlockDeathKeepsake"]["fields"]["keepsake_chamber_thresholds"] = "1, 1"
+    out = apply_keepsake_editor_profile(source, profile)
+    assert "\t\tChamberThresholds = { 1, 1 }," in out
+    assert "\t\tChamberThresholds =  { 25, 50 }," in out

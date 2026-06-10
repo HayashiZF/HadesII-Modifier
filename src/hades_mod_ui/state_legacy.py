@@ -1789,6 +1789,20 @@ KEEPSAKE_EDITOR_CONFIG: dict[str, dict[str, Any]] = {
     },
 }
 
+KEEPSAKE_CHAMBER_THRESHOLDS_FIELD: dict[str, str | bool] = {
+    "label": "ChamberThresholds",
+    "path": "ChamberThresholds",
+    "input_type": "positive_int_list",
+    "default": "25, 50",
+    "advanced": False,
+}
+
+for keepsake_meta in KEEPSAKE_EDITOR_CONFIG.values():
+    keepsake_meta["fields"] = {
+        "keepsake_chamber_thresholds": dict(KEEPSAKE_CHAMBER_THRESHOLDS_FIELD),
+        **keepsake_meta["fields"],
+    }
+
 KEEPSAKE_EDITOR_ORDER: tuple[str, ...] = tuple(KEEPSAKE_EDITOR_CONFIG.keys())
 
 DEFAULT_KEEPSAKE_EDITOR_STATE: dict[str, dict[str, Any]] = {
